@@ -22,6 +22,7 @@
         <nav class="main-nav" aria-label="Navegação do Racha">
             <button class="nav-item" type="button" data-view-target="home" aria-current="page"><span aria-hidden="true">⌂</span>Início</button>
             <button class="nav-item" type="button" data-view-target="match"><span aria-hidden="true">⚽</span>Racha</button>
+            <button class="nav-item" type="button" data-view-target="evolution"><span aria-hidden="true">✦</span>Evolução</button>
             <button class="nav-item" type="button" data-view-target="history"><span aria-hidden="true">◷</span>Histórico</button>
             <button class="nav-item" type="button" data-view-target="ranking"><span aria-hidden="true">▤</span>Ranking</button>
             <button class="nav-item" type="button" data-view-target="payments"><span aria-hidden="true">R$</span>Pagamentos</button>
@@ -34,8 +35,8 @@
     <main>
         <section class="app-view is-active" id="home-view" aria-labelledby="home-heading">
             <header class="dashboard-head">
-                <div><p class="eyebrow">Futebol entre amigos</p><h1 id="home-heading">O racha de hoje.</h1><p class="subtitle">Organize o próximo jogo, acompanhe a artilharia e acerte a resenha.</p></div>
-                <div class="dashboard-actions"><button class="text-action destructive-action" id="clear-players" type="button">Zerar jogadores</button><button class="primary home-start" type="button" data-view-target="match">Abrir escalação <span aria-hidden="true">→</span></button></div>
+                <div><p class="eyebrow">Futebol entre amigos</p><h1 id="home-heading">RACHA</h1><p class="subtitle">Monte os times em poucos segundos e comece o jogo.</p></div>
+                <div class="dashboard-actions"><button class="text-action destructive-action" id="clear-players" type="button">Limpar lista</button><button class="primary home-start" type="button" data-view-target="match">Novo racha <span aria-hidden="true">→</span></button></div>
             </header>
             <div class="dashboard-metrics" aria-label="Resumo do racha">
                 <article class="dashboard-metric"><span>Jogadores na lista</span><strong id="home-player-count">0</strong></article>
@@ -44,15 +45,15 @@
             </div>
             <div class="dashboard-grid">
                 <section class="home-panel setup-panel" aria-labelledby="setup-heading">
-                    <div class="home-panel-head"><div><p class="eyebrow">Preparação</p><h2 id="setup-heading">Configurar próximo jogo</h2></div><span class="panel-kicker">NOVO JOGO</span></div>
+                    <div class="home-panel-head"><div><p class="eyebrow">Preparação</p><h2 id="setup-heading">Novo racha</h2></div><span class="panel-kicker">PRÓXIMO JOGO</span></div>
                     <form id="setup-form" class="setup-form">
                         <label>Data<input id="game-date" type="date" required></label>
                         <label>Horário<input id="game-time" type="time" value="21:00"></label>
                         <label class="setup-wide">Local<input id="game-venue" type="text" maxlength="60" placeholder="Arena do bairro"></label>
                         <label>Valor por jogador<input id="game-fee" type="number" min="0" step="0.50" inputmode="decimal" placeholder="0,00"></label>
-                        <button class="primary setup-submit" type="submit">Começar novo jogo <span aria-hidden="true">→</span></button>
+                        <button class="primary setup-submit" type="submit">Continuar <span aria-hidden="true">→</span></button>
                     </form>
-                    <p class="setup-note">O controle de pagamentos é manual e fica salvo neste navegador.</p>
+                    <p class="setup-note">Dados do jogo e pagamentos ficam salvos neste navegador.</p>
                 </section>
                 <section class="home-panel home-rank-panel" aria-labelledby="today-rank-heading">
                     <div class="home-panel-head"><div><p class="eyebrow">Artilharia</p><h2 id="today-rank-heading">Destaques de hoje</h2></div><button class="text-action" type="button" data-view-target="ranking">Ver ranking →</button></div>
@@ -74,14 +75,50 @@
             </div>
             <div class="session-pill"><span class="session-ball" id="session-ball" aria-hidden="true"></span><strong id="summary-count">0 jogadores</strong></div>
         </section>
+        <section class="match-mode" aria-label="Modo do racha">
+            <div class="match-mode-copy"><strong>Modo do jogo</strong><span id="match-mode-description">Notas iguais para um jogo leve entre amigos.</span></div>
+            <div class="match-mode-toggle" role="group" aria-label="Escolha o modo do racha">
+                <button class="match-mode-button" type="button" data-match-mode="resenha" aria-pressed="true">Racha Resenha</button>
+                <button class="match-mode-button" type="button" data-match-mode="professional" aria-pressed="false">Racha Profissional</button>
+            </div>
+        </section>
         <div class="workspace">
             <section class="panel" aria-labelledby="roster-heading">
                 <div class="panel-head">
                     <h2 id="roster-heading">Lista de jogadores</h2><span class="count" id="roster-count">0</span>
                 </div>
-                <form class="entry" id="add-form"><input id="player-input" type="text" maxlength="32"
-                        placeholder="Nome do jogador" aria-label="Nome do jogador" autocomplete="off"><button
-                        class="primary" type="submit">+ Adicionar</button></form>
+                <div class="player-creation-shell">
+                    <div class="player-mode-toggle" role="group" aria-label="Modo de cadastro de jogador">
+                        <button class="player-mode-button is-active" type="button" data-mode="quick" aria-pressed="true">Rápido</button>
+                        <button class="player-mode-button" type="button" data-mode="advanced" aria-pressed="false">Detalhes</button>
+                    </div>
+                    <div class="preset-row" id="quick-preset-row">
+                        <span class="preset-label">Especialidades (até 3)</span>
+                        <div class="preset-pills">
+                            <button class="preset-pill is-active" type="button" data-preset="geral">Geral</button>
+                            <button class="preset-pill" type="button" data-preset="rapido">Rápido</button>
+                            <button class="preset-pill" type="button" data-preset="finalizador">Finalizador</button>
+                            <button class="preset-pill" type="button" data-preset="habilidoso">Habilidoso</button>
+                            <button class="preset-pill" type="button" data-preset="marcador">Marcador</button>
+                            <button class="preset-pill" type="button" data-preset="forte">Forte</button>
+                            <button class="preset-pill" type="button" data-preset="melhorPe">Pé fraco</button>
+                            <button class="preset-pill" type="button" data-preset="ambidestro">Ambidestro</button>
+                            <button class="preset-pill" type="button" data-preset="goleiro">Goleiro</button>
+                            <button class="preset-pill" type="button" data-preset="faltoso">Faltoso</button>
+                        </div>
+                        <span class="preset-current" id="preset-label">Geral</span>
+                    </div>
+                    <form class="entry" id="add-form">
+                        <div class="identity-row">
+                            <input id="player-input" type="text" maxlength="32" placeholder="Nome do jogador" aria-label="Nome do jogador" autocomplete="off">
+                            <div class="measure-row">
+                                <input id="player-height" type="number" min="140" max="220" step="1" inputmode="numeric" placeholder="Altura" aria-label="Altura em centímetros">
+                                <input id="player-weight" type="number" min="40" max="160" step="1" inputmode="numeric" placeholder="Peso" aria-label="Peso em quilos">
+                            </div>
+                        </div>
+                        <button class="primary" type="submit">+ Adicionar</button>
+                    </form>
+                </div>
                 <details class="bulk-entry">
                     <summary>Adicionar vários nomes de uma vez</summary><textarea id="bulk-input"
                         placeholder="Um nome por linha ou separados por vírgula"></textarea><button type="button"
@@ -103,6 +140,11 @@
             </section>
         </div>
         <section id="match-recording" class="match-recording" aria-live="polite"></section>
+        </section>
+
+        <section class="app-view data-view evolution-view" id="evolution-view" aria-labelledby="evolution-heading">
+            <header class="data-view-head"><div><p class="eyebrow">Desenvolvimento dos jogadores</p><h1 id="evolution-heading">Evolução.</h1><p class="subtitle">Aprimore habilidades e acompanhe cada trilha até o Card Premium.</p></div></header>
+            <div id="evolution-roster" class="evolution-roster"></div>
         </section>
 
         <section class="app-view data-view" id="history-view" aria-labelledby="history-heading">

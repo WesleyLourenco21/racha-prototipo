@@ -14,15 +14,24 @@ const statGroups = [
     { key: "defending", name: "Defesa", stats: [["interceptions", "Interceptações", 50], ["defAware", "Noção defensiva", 50], ["standTackle", "Desarme em pé", 50]] },
     { key: "physical", name: "Físico", stats: [["stamina", "Fôlego", 50], ["strength", "Força", 50], ["jumping", "Impulsão", 50]] }
 ];
+const specialGroups = [
+    { key: "technique", name: "Técnica especial", stats: [["crossing", "Cruzamento", 50], ["setPieces", "Bola parada", 50], ["balance", "Equilíbrio", 50], ["headingAcc", "Cabeceio", 50]] },
+    { key: "defenseSpecial", name: "Defesa especial", stats: [["slideTackle", "Carrinho", 50]] },
+    { key: "mental", name: "Mentalidade", stats: [["reactions", "Reação", 50], ["composure", "Compostura", 50], ["leadership", "Liderança", 50], ["aggression", "Intensidade", 50]] },
+    { key: "goalkeeping", name: "Goleiro", stats: [["diving", "Elasticidade", 50], ["handling", "Defesa de bola", 50], ["kicking", "Reposição", 50], ["reflexes", "Reflexos", 50], ["positioning", "Posicionamento", 50]] }
+];
+const allStatGroups = [...statGroups, ...specialGroups];
 const rosterElement = document.querySelector("#roster");
+const evolutionRosterElement = document.querySelector("#evolution-roster");
 const teamsArea = document.querySelector("#teams-area");
 const recordingArea = document.querySelector("#match-recording");
 const drawButton = document.querySelector("#draw-button");
-const players = loadPlayers();
 let teams = null;
 let selectedPlayerId = null;
 let comparisonPlayerIds = null;
 let selectionMode = "swap";
+let playerCreationMode = "quick";
+let activePresets = new Set(["geral"]);
 let toastTimer;
 let customCrowdUrl = null;
 let customMusicUrl = null;
@@ -48,6 +57,7 @@ const themePalettes = {
 const audioSettings = loadAudioSettings();
 let matches = loadMatches();
 let gameSetup = loadGameSetup();
+let matchMode = gameSetup.mode;
 let activeMatchSetup = null;
 let activeMatchId = null;
 let rankingPeriod = "day";
@@ -300,7 +310,7 @@ function loadPlayers() {
         if (!Array.isArray(saved)) return [];
         return saved.filter(player => player && typeof player.name === "string" && player.name.trim()).map(player => {
             const stats = {};
-            statGroups.forEach(group => {
+            allStatGroups.forEach(group => {
                 const legacyIndex = legacyGroupIndexes[group.key];
                 const legacyRating = Array.isArray(player.skills) && legacyIndex !== undefined ? Number(player.skills[legacyIndex]) : NaN;
                 const groupValue = Number(player.stats?.[group.key]);
@@ -311,10 +321,21 @@ function loadPlayers() {
                     stats[key] = Number.isFinite(value) ? clampStat(value === previousProfileDefaults[key] ? 50 : value) : fallback;
                 });
             });
+            const profileList = Array.isArray(player.quickProfile)
+                ? player.quickProfile
+                : Object.hasOwn(quickProfiles, player.quickProfile) ? [player.quickProfile] : ["geral"];
+            const validProfiles = profileList.filter(name => Object.hasOwn(quickProfiles, name));
             return {
                 id: typeof player.id === "string" ? player.id : createId(),
                 name: player.name.trim().slice(0, 32),
-                stats
+                stats,
+                quickProfile: validProfiles.length ? validProfiles : ["geral"],
+                height: Number(player.height) || 0,
+                weight: Number(player.weight) || 0,
+                weakFoot: Math.min(5, Math.max(1, Math.round(Number(player.weakFoot) || 2))),
+                growthPoints: Number.isFinite(Number(player.growthPoints)) ? Math.max(0, Math.floor(Number(player.growthPoints))) : matches.filter(match => match.participants.some(participant => participant.id === player.id)).length,
+                growthNodes: Array.isArray(player.growthNodes) ? player.growthNodes.filter(node => growthNodeIds.has(node)) : [],
+                premium: player.premium === true
             };
         });
     } catch {
@@ -348,14 +369,15 @@ function loadMatches() {
 }
 
 function loadGameSetup() {
-    const defaults = { date: localDateKey(), time: "21:00", venue: "", fee: 0 };
+    const defaults = { date: localDateKey(), time: "21:00", venue: "", fee: 0, mode: "resenha" };
     try {
         const saved = JSON.parse(localStorage.getItem(GAME_SETUP_KEY) || "{}");
         return {
             date: /^\d{4}-\d{2}-\d{2}$/.test(saved.date || "") ? saved.date : defaults.date,
             time: /^\d{2}:\d{2}$/.test(saved.time || "") ? saved.time : defaults.time,
             venue: typeof saved.venue === "string" ? saved.venue.slice(0, 60) : defaults.venue,
-            fee: Number.isFinite(Number(saved.fee)) ? Math.max(0, Number(saved.fee)) : defaults.fee
+            fee: Number.isFinite(Number(saved.fee)) ? Math.max(0, Number(saved.fee)) : defaults.fee,
+            mode: saved.mode === "professional" ? "professional" : defaults.mode
         };
     } catch {
         return defaults;
@@ -413,12 +435,103 @@ function statStyle(value) {
     return `--stat-color: ${statColor(rating)}; --stat-progress: ${(rating - 1) / 98 * 100}%`;
 }
 
-function makePlayer(name) {
-    const stats = {};
-    statGroups.forEach(group => {
-        group.stats.forEach(([key, , value]) => { stats[key] = value; });
+const quickProfiles = {
+    geral: { label: "Geral", stats: {} },
+    rapido: { label: "Rápido", stats: { acceleration: 10, sprintSpeed: 12, ballSpeed: 10, agility: 6, reactions: 4, stamina: 3 } },
+    finalizador: { label: "Finalizador", stats: { attPosition: 8, finishing: 12, shotPower: 10, composure: 5, setPieces: 3 } },
+    habilidoso: { label: "Habilidoso", stats: { vision: 8, shortPass: 9, longPass: 5, crossing: 5, agility: 6, balance: 4, ballControl: 10, dribblingSkill: 8 } },
+    marcador: { label: "Marcador", stats: { interceptions: 8, defAware: 8, standTackle: 8, slideTackle: 6, headingAcc: 4, strength: 4 } },
+    forte: { label: "Forte", stats: { strength: 10, stamina: 6, jumping: 7, headingAcc: 5, aggression: 5, sprintSpeed: 2 } },
+    melhorPe: { label: "Pé fraco", weakFoot: 3, stats: { ballControl: 5, dribblingSkill: 5, shortPass: 4, balance: 4 } },
+    ambidestro: { label: "Ambidestro", weakFoot: 5, stats: { vision: 4, shortPass: 5, longPass: 4, dribblingSkill: 5, ballControl: 5 } },
+    goleiro: { label: "Goleiro", stats: { diving: 12, handling: 10, kicking: 7, reflexes: 12, positioning: 10, reactions: 5, jumping: 4 } },
+    faltoso: { label: "Faltoso", stats: { aggression: 10, standTackle: 6, interceptions: 4, defAware: 3, strength: 4, leadership: -2 } }
+};
+const growthBranches = [
+    { name: "Técnica", nodes: [
+        { id: "touch", name: "Domínio", boosts: { ballControl: 6, dribblingSkill: 6 } },
+        { id: "creation", name: "Criação", requires: "touch", boosts: { vision: 6, shortPass: 6, setPieces: 7 } }
+    ] },
+    { name: "Ataque", nodes: [
+        { id: "finishing", name: "Finalização", boosts: { attPosition: 7, finishing: 8, shotPower: 6 } },
+        { id: "weak-foot", name: "Pé fraco", requires: "finishing", boosts: { finishing: 5 }, weakFoot: 1 }
+    ] },
+    { name: "Defesa", nodes: [
+        { id: "marking", name: "Marcação", boosts: { interceptions: 7, defAware: 7, standTackle: 6 } },
+        { id: "leadership", name: "Liderança", requires: "marking", boosts: { leadership: 9, composure: 6, reactions: 4 } }
+    ] },
+    { name: "Goleiro", nodes: [
+        { id: "keeper-reflex", name: "Reflexos", boosts: { diving: 7, reflexes: 8, positioning: 5 } },
+        { id: "keeper-command", name: "Segurança", requires: "keeper-reflex", boosts: { handling: 8, kicking: 6, leadership: 4 } }
+    ] }
+];
+const premiumNodeId = "premium-card";
+const growthNodeIds = new Set([...growthBranches.flatMap(branch => branch.nodes.map(node => node.id)), premiumNodeId]);
+const premiumPrerequisites = growthBranches.map(branch => branch.nodes.at(-1).id);
+const players = loadPlayers();
+
+function getSelectedProfileNames() {
+    const names = [...activePresets].filter(name => Object.hasOwn(quickProfiles, name));
+    return names.length ? names : ["geral"];
+}
+
+function getQuickProfileLabel(profileNames) {
+    const profiles = Array.isArray(profileNames) ? profileNames : [profileNames || "geral"];
+    const valid = profiles.filter(name => Object.hasOwn(quickProfiles, name));
+    if (!valid.length) return quickProfiles.geral.label;
+    if (valid.length === 1) return quickProfiles[valid[0]].label;
+    return valid.map(name => quickProfiles[name].label).join(" + ");
+}
+
+function applyQuickProfile(stats, profileNames, height = 0, weight = 0) {
+    const selected = Array.isArray(profileNames) && profileNames.length ? profileNames : [profileNames || "geral"];
+    const valid = selected.filter(name => Object.hasOwn(quickProfiles, name));
+    const result = { ...stats };
+    if (!valid.length) return result;
+
+    valid.forEach(name => {
+        const profile = quickProfiles[name] || quickProfiles.geral;
+        Object.entries(profile.stats).forEach(([key, value]) => {
+            if (!Object.hasOwn(result, key)) return;
+            const current = Number(result[key]) || 50;
+            result[key] = clampStat(current + Math.round(value * 0.45));
+        });
     });
-    return { id: createId(), name, stats };
+
+    if (height > 0) {
+        result.physical = clampStat((Number(result.physical) || 50) + Math.round((height - 170) * 0.12) + 2);
+        result.jumping = clampStat((Number(result.jumping) || 50) + Math.round((height - 170) * 0.14) + 2);
+        result.strength = clampStat((Number(result.strength) || 50) + Math.round((height - 170) * 0.08) + 2);
+    }
+
+    if (weight > 0) {
+        result.strength = clampStat((Number(result.strength) || 50) + Math.round(weight * 0.08) + 2);
+        result.stamina = clampStat((Number(result.stamina) || 50) + Math.round(weight * 0.04) + 1);
+    }
+
+    return result;
+}
+
+function makePlayer(name, profileNames = getSelectedProfileNames(), height = 0, weight = 0) {
+    const stats = {};
+    const defaultRating = matchMode === "professional" ? 58 : 50;
+    allStatGroups.forEach(group => {
+        group.stats.forEach(([key]) => { stats[key] = defaultRating; });
+    });
+    const selection = Array.isArray(profileNames) ? profileNames : [profileNames];
+    const player = {
+        id: createId(),
+        name,
+        stats: applyQuickProfile(stats, selection, height, weight),
+        quickProfile: selection,
+        height,
+        weight,
+        weakFoot: Math.max(2, ...selection.map(profile => quickProfiles[profile]?.weakFoot || 0)),
+        growthPoints: 0,
+        growthNodes: [],
+        premium: false
+    };
+    return player;
 }
 
 function escapeHtml(value) {
@@ -426,14 +539,17 @@ function escapeHtml(value) {
 }
 
 function calculateStars(player) {
-    const ratings = statGroups.flatMap(group => group.stats.map(([key]) => player.stats[key]));
-    const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
-    return Math.max(1, Math.min(5, Math.round((1 + (average - 1) * 4 / 98) * 2) / 2));
+    if (matchMode === "professional" && player.premium) return 6;
+    const overall = calculateOverall(player);
+    return Math.max(1, Math.min(5, Math.round((1 + (overall - 1) * 4 / 98) * 2) / 2));
 }
 
 function calculateOverall(player) {
     const ratings = statGroups.flatMap(group => group.stats.map(([key]) => player.stats[key]));
-    return Math.round(ratings.reduce((total, value) => total + value, 0) / ratings.length);
+    if (matchMode === "resenha") return 60;
+    if (player.premium) return 96;
+    const average = ratings.reduce((total, value) => total + value, 0) / ratings.length;
+    return Math.min(93, Math.round(average * 0.45 + 48));
 }
 
 function ratingTier(rating) {
@@ -450,6 +566,43 @@ function categoryRating(player, group) {
 
 function teamOverall(team) {
     return team.length ? Math.round(team.reduce((total, player) => total + calculateOverall(player), 0) / team.length) : 0;
+}
+
+function buildBalancedTeams(pool) {
+    const playersList = [...pool].sort((first, second) => calculateOverall(second) - calculateOverall(first));
+    const teams = [[], []];
+    const totals = [0, 0];
+
+    playersList.forEach(player => {
+        const playerOverall = calculateOverall(player);
+        const teamChoices = [
+            {
+                index: 0,
+                score: Math.abs((totals[0] + playerOverall) - totals[1]) + Math.max(0, (teams[1].length - teams[0].length)) * 5
+            },
+            {
+                index: 1,
+                score: Math.abs((totals[1] + playerOverall) - totals[0]) + Math.max(0, (teams[0].length - teams[1].length)) * 5
+            }
+        ];
+
+        const choice = teamChoices.reduce((best, current) => current.score < best.score ? current : best, teamChoices[0]);
+        teams[choice.index].push(player);
+        totals[choice.index] += playerOverall;
+    });
+
+    while (teams[0].length - teams[1].length > 1) {
+        const player = teams[0].pop();
+        if (!player) break;
+        teams[1].push(player);
+    }
+    while (teams[1].length - teams[0].length > 1) {
+        const player = teams[1].pop();
+        if (!player) break;
+        teams[0].push(player);
+    }
+
+    return teams;
 }
 
 function renderPlayerComparison() {
@@ -497,28 +650,78 @@ function formatStars(rating) {
 }
 
 function renderStarRating(rating) {
-    const stars = Array.from({ length: 5 }, (_, index) => {
+    const starCount = rating > 5 ? 6 : 5;
+    const stars = Array.from({ length: starCount }, (_, index) => {
         const fill = Math.max(0, Math.min(1, rating - index));
         const state = fill === 1 ? "full" : fill === 0.5 ? "half" : "empty";
-        return `<span class="rating-star ${state}" aria-hidden="true">★</span>`;
+        return `<span class="rating-star ${state} ${index === 5 ? "premium-star" : ""}" aria-hidden="true">★</span>`;
     }).join("");
-    return `<span class="rating-display" aria-label="${formatStars(rating)} de 5 estrelas"><span class="rating-stars" aria-hidden="true">${stars}</span><span class="rating-number">${formatStars(rating)}</span></span>`;
+    return `<span class="rating-display ${starCount === 6 ? "is-premium" : ""}" aria-label="${formatStars(rating)} de ${starCount} estrelas"><span class="rating-stars" aria-hidden="true">${stars}</span><span class="rating-number">${formatStars(rating)}</span></span>`;
 }
 
 function renderOverall(player) {
     const overall = calculateOverall(player);
-    return `<span class="overall-badge tier-${ratingTier(overall)}" aria-label="Nota geral ${overall} de 99"><strong style="color: ${statColor(overall)}">${overall}</strong><small>GER</small></span>`;
+    return `<span class="overall-badge tier-${ratingTier(overall)} ${player.premium && matchMode === "professional" ? "premium-badge" : ""}" aria-label="Nota geral ${overall} de 99"><strong style="color: ${statColor(overall)}">${overall}</strong><small>${player.premium && matchMode === "professional" ? "PREMIUM" : "GER"}</small></span>`;
 }
 
-function renderSkillDisclosure(player, editable) {
-    const groups = statGroups.map(group => `<section class="stat-group" data-group="${group.key}">
+function renderSkillDisclosure(player, editable, expanded = false) {
+    editable = editable && matchMode === "professional";
+    const groups = allStatGroups.map(group => `<section class="stat-group" data-group="${group.key}">
         <div class="stat-group-heading"><span>${group.name}</span><strong style="color: ${statColor(categoryRating(player, group))}">${categoryRating(player, group)}</strong></div>
         <div class="stat-list">${group.stats.map(([key, label]) => editable
-            ? `<label class="stat-row" style="${statStyle(player.stats[key])}"><span>${label}</span><input type="range" min="1" max="99" value="${player.stats[key]}" data-stat="${key}" aria-label="${label} de ${escapeHtml(player.name)}"><output>${player.stats[key]}</output></label>`
+            ? `<label class="stat-row" style="${statStyle(player.stats[key])}"><span>${label}</span><input type="range" min="1" max="99" value="${player.stats[key]}" data-stat="${key}" aria-label="${label} de ${escapeHtml(player.name)}" ${player.premium ? "disabled" : ""}><output>${player.stats[key]}</output></label>`
             : `<div class="stat-row"><span>${label}</span><span class="team-stat-value" style="color: ${statColor(player.stats[key])}">${player.stats[key]}</span></div>`
         ).join("")}</div>
       </section>`).join("");
-    return `<details class="player-skills-disclosure"><summary><span>Ver habilidades</span><span class="disclosure-count">18 atributos</span></summary><div class="disclosed-groups">${groups}</div></details>`;
+    const weakFoot = editable
+        ? `<label class="weak-foot-control"><span>Pé fraco</span><input type="range" min="1" max="5" step="1" value="${player.weakFoot}" data-weak-foot aria-label="Pé fraco de ${escapeHtml(player.name)}" ${player.premium ? "disabled" : ""}><output>${player.weakFoot}/5</output></label>`
+        : `<div class="weak-foot-summary"><span>Pé fraco</span><strong>${"★".repeat(player.weakFoot)}${"☆".repeat(5 - player.weakFoot)}</strong></div>`;
+    const attributeCount = allStatGroups.reduce((count, group) => count + group.stats.length, 1);
+    return `<details class="player-skills-disclosure" ${expanded ? "open" : ""}><summary><span>Ver habilidades</span><span class="disclosure-count">${attributeCount} atributos</span></summary><div class="disclosed-groups">${groups}<section class="stat-group weak-foot-group"><div class="stat-group-heading"><span>Técnica especial</span></div>${weakFoot}</section></div>${editable ? renderGrowthTree(player) : ""}</details>`;
+}
+
+function renderGrowthTree(player) {
+    const unlocked = new Set(player.growthNodes);
+    const branches = growthBranches.map(branch => `<section class="growth-branch"><h4>${branch.name}</h4><ol>${branch.nodes.map((node, index) => {
+        const isUnlocked = unlocked.has(node.id);
+        const prerequisiteMet = !node.requires || unlocked.has(node.requires);
+        const disabled = player.premium || isUnlocked || !prerequisiteMet || player.growthPoints < 1;
+        const status = isUnlocked ? "Desbloqueado" : !prerequisiteMet ? "Bloqueado" : player.growthPoints < 1 ? "Sem pontos" : "Disponível";
+        return `<li class="growth-node ${isUnlocked ? "is-unlocked" : ""}"><span class="growth-node-marker">${isUnlocked ? "✓" : index + 1}</span><button type="button" data-growth-node="${node.id}" ${disabled ? "disabled" : ""}><strong>${node.name}</strong><small>${status}</small></button></li>`;
+    }).join("")}</ol></section>`).join("");
+    const premiumReady = premiumPrerequisites.every(node => unlocked.has(node));
+    const premiumDisabled = player.premium || !premiumReady || player.growthPoints < 1;
+    const premiumStatus = player.premium ? "Desbloqueado" : !premiumReady ? "Complete as quatro trilhas" : player.growthPoints < 1 ? "Sem pontos" : "Disponível";
+    return `<section class="growth-tree"><div class="growth-tree-heading"><div><h3>Árvore de crescimento</h3><p>Ganhe 1 ponto ao registrar uma partida.</p></div><strong>${player.growthPoints} ${player.growthPoints === 1 ? "ponto" : "pontos"}</strong></div><div class="growth-branches">${branches}</div><div class="premium-unlock ${player.premium ? "is-unlocked" : ""}"><div><strong>Card Premium · ★6</strong><small>${premiumStatus}</small></div><button type="button" data-growth-node="${premiumNodeId}" ${premiumDisabled ? "disabled" : ""}>${player.premium ? "Premium" : "Desbloquear · 1 ponto"}</button></div></section>`;
+}
+
+function unlockGrowthNode(player, nodeId) {
+    if (player.premium) return;
+    if (player.growthPoints < 1) return showToast("Registre uma partida para ganhar um ponto de evolução.");
+    if (nodeId === premiumNodeId) {
+        if (!premiumPrerequisites.every(node => player.growthNodes.includes(node))) return showToast("Complete as quatro trilhas antes do Card Premium.");
+        player.growthPoints -= 1;
+        player.premium = true;
+        player.weakFoot = 5;
+        Object.keys(player.stats).forEach(key => { player.stats[key] = Math.max(90, player.stats[key]); });
+        ["finishing", "ballControl", "vision", "reflexes", "diving", "leadership", "setPieces"].forEach(key => { player.stats[key] = 99; });
+        showToast("Card Premium desbloqueado: overall 96 e sexta estrela!");
+    } else {
+        const node = growthBranches.flatMap(branch => branch.nodes).find(item => item.id === nodeId);
+        if (!node || player.growthNodes.includes(node.id)) return;
+        if (node.requires && !player.growthNodes.includes(node.requires)) return showToast("Desbloqueie o passo anterior desta trilha primeiro.");
+        player.growthPoints -= 1;
+        player.growthNodes.push(node.id);
+        Object.entries(node.boosts).forEach(([key, value]) => {
+            player.stats[key] = clampStat((Number(player.stats[key]) || 50) + value);
+        });
+        if (node.weakFoot) player.weakFoot = Math.min(5, player.weakFoot + node.weakFoot);
+        showToast(`${node.name} evoluiu. Continue a trilha para crescer.`);
+    }
+    savePlayers();
+    renderRoster();
+    renderTeams();
+    renderEvolution();
 }
 
 function showToast(message) {
@@ -679,6 +882,7 @@ function saveMatchResult() {
         time: setup.time,
         venue: setup.venue,
         fee: setup.fee,
+        mode: setup.mode || matchMode,
         teams: teams.map(team => team.map(player => player.id)),
         participants,
         stats,
@@ -686,10 +890,16 @@ function saveMatchResult() {
         payments: Object.fromEntries(participants.map(participant => [participant.id, false]))
     };
     matches.unshift(match);
+    participants.forEach(participant => {
+        const player = players.find(item => item.id === participant.id);
+        if (player) player.growthPoints += 1;
+    });
     activeMatchId = match.id;
     drawButton.disabled = true;
     document.querySelector("#clear-teams").disabled = true;
     saveMatches();
+    savePlayers();
+    renderRoster();
     renderMatchRecording();
     renderHome();
     renderHistory();
@@ -708,6 +918,7 @@ function showAppView(viewName) {
     });
     if (viewName === "match" && !activeMatchSetup) activeMatchSetup = { ...gameSetup };
     if (viewName === "home") renderHome();
+    if (viewName === "evolution") renderEvolution();
     if (viewName === "history") renderHistory();
     if (viewName === "ranking") renderRankings();
     if (viewName === "payments") renderPayments();
@@ -719,7 +930,8 @@ function readGameSetup() {
         date: document.querySelector("#game-date").value,
         time: document.querySelector("#game-time").value,
         venue: document.querySelector("#game-venue").value.trim(),
-        fee: Math.max(0, Number(document.querySelector("#game-fee").value) || 0)
+        fee: Math.max(0, Number(document.querySelector("#game-fee").value) || 0),
+        mode: matchMode
     };
     saveGameSetup();
 }
@@ -744,7 +956,18 @@ function initializeDashboard() {
     document.querySelector("#game-time").value = gameSetup.time;
     document.querySelector("#game-venue").value = gameSetup.venue;
     document.querySelector("#game-fee").value = gameSetup.fee || "";
-    document.querySelectorAll("[data-view-target]").forEach(button => button.addEventListener("click", () => showAppView(button.dataset.viewTarget)));
+    document.querySelectorAll(".match-mode-button").forEach(button => {
+        button.setAttribute("aria-pressed", String(button.dataset.matchMode === matchMode));
+        button.addEventListener("click", () => updateMatchMode(button.dataset.matchMode));
+    });
+    document.querySelector("#match-mode-description").textContent = matchMode === "professional"
+        ? "Notas mais altas e perfis contam no equilíbrio dos times."
+        : "Notas iguais para um jogo leve entre amigos.";
+    syncPlayerCreationControls();
+    document.addEventListener("click", event => {
+        const viewButton = event.target.closest("[data-view-target]");
+        if (viewButton) showAppView(viewButton.dataset.viewTarget);
+    });
     document.querySelector("#setup-form").addEventListener("input", readGameSetup);
     document.querySelector("#setup-form").addEventListener("submit", event => {
         event.preventDefault();
@@ -800,6 +1023,41 @@ function initializeDashboard() {
     });
 }
 
+function updateMatchMode(mode) {
+    if (activeMatchId) {
+        showToast("Este jogo já foi salvo. Comece um novo jogo para trocar o modo.");
+        return;
+    }
+    matchMode = mode === "professional" ? "professional" : "resenha";
+    gameSetup.mode = matchMode;
+    if (activeMatchSetup) activeMatchSetup.mode = matchMode;
+    if (matchMode === "resenha") {
+        activePresets = new Set(["geral"]);
+        document.querySelectorAll(".preset-pill").forEach(button => button.classList.toggle("is-active", button.dataset.preset === "geral"));
+        document.querySelector("#preset-label").textContent = "Geral";
+        document.querySelector("#player-height").value = "";
+        document.querySelector("#player-weight").value = "";
+    }
+    document.querySelectorAll(".match-mode-button").forEach(button => {
+        button.setAttribute("aria-pressed", String(button.dataset.matchMode === matchMode));
+    });
+    document.querySelector("#match-mode-description").textContent = matchMode === "professional"
+        ? "Notas mais altas e perfis contam no equilíbrio dos times."
+        : "Notas iguais para um jogo leve entre amigos.";
+    syncPlayerCreationControls();
+    saveGameSetup();
+    renderRoster();
+    invalidateTeams();
+}
+
+function syncPlayerCreationControls() {
+    const isResenha = matchMode === "resenha";
+    document.querySelector(".player-mode-toggle").hidden = isResenha;
+    document.querySelector("#quick-preset-row").hidden = isResenha || playerCreationMode !== "quick";
+    document.querySelector(".measure-row").hidden = isResenha;
+    document.querySelector("#player-input").setAttribute("placeholder", isResenha || playerCreationMode === "quick" ? "Nome do jogador" : "Digite o nome e ajuste depois");
+}
+
 function setAllPayments(paid) {
     const action = paid ? "marcar todos os pagamentos como pagos" : "zerar os pagamentos e deixá-los pendentes";
     if (!window.confirm(`Deseja ${action} em todas as partidas?`)) return;
@@ -832,13 +1090,31 @@ function renderRoster() {
     }
     rosterElement.innerHTML = players.map(player => {
         const stars = calculateStars(player);
-                const tier = ratingTier(calculateOverall(player));
+        const tier = ratingTier(calculateOverall(player));
+        const quickLabel = getQuickProfileLabel(player.quickProfile || ["geral"]);
         return `
             <article class="player-card tier-${tier}" data-id="${player.id}">
                 <div class="player-top"><span class="player-name" title="${escapeHtml(player.name)}">${escapeHtml(player.name)}</span><span class="player-actions">${renderStarRating(stars)}${renderOverall(player)}<button class="icon-btn edit" type="button" aria-label="Editar nome de ${escapeHtml(player.name)}" title="Editar nome">✎</button><button class="icon-btn remove" type="button" aria-label="Remover ${escapeHtml(player.name)}" title="Remover jogador">×</button></span></div>
-                ${renderSkillDisclosure(player, true)}
+                <div class="quick-profile-pill">${escapeHtml(quickLabel)}${matchMode === "professional" ? ` · Pé fraco ${player.weakFoot}/5` : ""}</div>
       </article>`;
     }).join("");
+}
+
+function renderEvolution() {
+    if (matchMode !== "professional") {
+        evolutionRosterElement.innerHTML = '<div class="evolution-empty"><h2>Evolução profissional</h2><p>Ative o Racha Profissional na montagem para editar atributos e evoluir os jogadores.</p><button class="primary" type="button" data-view-target="match">Ir para montagem</button></div>';
+        return;
+    }
+    if (!players.length) {
+        evolutionRosterElement.innerHTML = '<div class="evolution-empty"><h2>Comece pela escalação</h2><p>Cadastre os jogadores na montagem para abrir suas habilidades e trilhas de evolução.</p><button class="primary" type="button" data-view-target="match">Ir para montagem</button></div>';
+        return;
+    }
+    evolutionRosterElement.innerHTML = players.map(player => `
+        <article class="player-card evolution-player-card tier-${ratingTier(calculateOverall(player))}" data-id="${player.id}">
+            <div class="player-top"><span class="player-name" title="${escapeHtml(player.name)}">${escapeHtml(player.name)}</span><span class="player-actions">${renderStarRating(calculateStars(player))}${renderOverall(player)}</span></div>
+            <div class="quick-profile-pill">${escapeHtml(getQuickProfileLabel(player.quickProfile || ["geral"]))} · Pé fraco ${player.weakFoot}/5</div>
+            ${renderSkillDisclosure(player, true, true)}
+        </article>`).join("");
 }
 
 function renderPitchBall(gradientId = "pitch-ball-shell") {
@@ -856,7 +1132,7 @@ function renderTeams() {
     const teamTotal = teams[0].length + teams[1].length;
     const teamRatings = teams.map(teamOverall);
     const ratingDifference = Math.abs(teamRatings[0] - teamRatings[1]);
-    const balanceLabel = ratingDifference <= 3 ? "Notas gerais próximas" : ratingDifference <= 8 ? "Diferença moderada" : `${ratingDifference} pontos de diferença`;
+    const balanceLabel = ratingDifference <= 3 ? "Times muito equilibrados" : ratingDifference <= 8 ? "Diferença moderada" : `${ratingDifference} pontos de diferença`;
     const balancePercent = Math.round(Math.min(teamRatings[0], teamRatings[1]) / Math.max(teamRatings[0], teamRatings[1], 1) * 100);
     const compareContent = renderPlayerComparison();
     const selectionHint = selectionMode === "compare"
@@ -871,6 +1147,7 @@ function renderTeams() {
             <div class="result-team result-b"><span>Time B</span><strong>${teamRatings[1]}<small>GER</small></strong></div>
         </div>
         <div class="balance-status"><div class="balance-track" role="img" aria-label="${balanceLabel}"><span style="--balance-fill: ${balancePercent}%"></span></div><strong>${balanceLabel}</strong></div>
+        <button class="secondary-action match-balance-button" type="button" id="balance-teams">✨ Equilibrar times</button>
         </section><div class="team-interactions" role="group" aria-label="Ações entre jogadores">
                 <button class="interaction-choice" type="button" data-selection-mode="swap" aria-pressed="${selectionMode === "swap"}">↔ <span>Trocar jogadores</span></button>
                 <button class="interaction-choice" type="button" data-selection-mode="compare" aria-pressed="${selectionMode === "compare"}">⇄ <span>Comparar jogadores</span></button>
@@ -882,7 +1159,7 @@ function renderTeams() {
                         const actionLabel = selectionMode === "compare" ? `Selecionar ${player.name} para comparação` : selectedPlayerId ? `Trocar ${player.name} de time` : `Selecionar ${player.name} para troca`;
                         return `<article class="team-player tier-${ratingTier(calculateOverall(player))} ${selectedPlayerId === player.id ? "selected" : ""} ${selectedPlayerId ? "selectable" : ""}" style="--player-index: ${playerIndex}" data-id="${player.id}" data-team="${teamIndex}" role="group" tabindex="0" aria-label="${escapeHtml(actionLabel)}">
                                 <div class="player-top"><span class="team-player-identity"><span class="player-name">${escapeHtml(player.name)}</span></span><span class="team-player-rating">${renderStarRating(calculateStars(player))}${renderOverall(player)}</span></div>
-                ${renderSkillDisclosure(player, false)}
+                <div class="quick-profile-pill team-specialties">${escapeHtml(getQuickProfileLabel(player.quickProfile || ["geral"]))}${matchMode === "professional" ? ` · Pé fraco ${player.weakFoot}/5` : ""}</div>
           </article>`;
         }).join("")}</div>
             </section>`;
@@ -897,7 +1174,10 @@ function addPlayer(name) {
         showToast(`${cleanName} já está na lista.`);
         return false;
     }
-    players.push(makePlayer(cleanName));
+    const heightValue = matchMode === "professional" ? Number(document.querySelector("#player-height")?.value || 0) : 0;
+    const weightValue = matchMode === "professional" ? Number(document.querySelector("#player-weight")?.value || 0) : 0;
+    const selectedProfiles = matchMode === "professional" ? getSelectedProfileNames() : ["geral"];
+    players.push(makePlayer(cleanName, selectedProfiles, heightValue, weightValue));
     return true;
 }
 
@@ -914,6 +1194,36 @@ document.querySelector("#add-form").addEventListener("submit", event => {
     input.focus();
 });
 
+document.querySelectorAll(".preset-pill").forEach(button => {
+    button.addEventListener("click", () => {
+        const preset = button.dataset.preset;
+        if (preset === "geral") {
+            activePresets = new Set(["geral"]);
+        } else {
+            if (activePresets.has(preset)) {
+                activePresets.delete(preset);
+                if (!activePresets.size) activePresets = new Set(["geral"]);
+            } else {
+                if (activePresets.size >= 3) return showToast("Escolha no máximo três especialidades iniciais.");
+                activePresets.delete("geral");
+                activePresets.add(preset);
+            }
+        }
+        document.querySelectorAll(".preset-pill").forEach(item => {
+            item.classList.toggle("is-active", activePresets.has(item.dataset.preset));
+        });
+        document.querySelector("#preset-label").textContent = getQuickProfileLabel([...activePresets]);
+    });
+});
+
+document.querySelectorAll(".player-mode-button").forEach(button => {
+    button.addEventListener("click", () => {
+        playerCreationMode = button.dataset.mode;
+        document.querySelectorAll(".player-mode-button").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        syncPlayerCreationControls();
+    });
+});
+
 document.querySelector("#bulk-add").addEventListener("click", () => {
     const input = document.querySelector("#bulk-input");
     const names = input.value.split(/[\n,;]+/).map(name => name.trim()).filter(Boolean);
@@ -928,7 +1238,20 @@ document.querySelector("#bulk-add").addEventListener("click", () => {
     }
 });
 
-rosterElement.addEventListener("input", event => {
+document.addEventListener("input", event => {
+    const weakFootSlider = event.target.closest("input[data-weak-foot]");
+    if (weakFootSlider) {
+        const player = players.find(item => item.id === weakFootSlider.closest("[data-id]").dataset.id);
+        if (!player) return;
+        player.weakFoot = Math.min(5, Math.max(1, Number(weakFootSlider.value)));
+        weakFootSlider.parentElement.querySelector("output").textContent = `${player.weakFoot}/5`;
+        const card = weakFootSlider.closest(".player-card");
+        const specialty = card.querySelector(".quick-profile-pill");
+        if (specialty) specialty.textContent = `${getQuickProfileLabel(player.quickProfile || ["geral"])} · Pé fraco ${player.weakFoot}/5`;
+        savePlayers();
+        renderTeams();
+        return;
+    }
     const slider = event.target.closest("input[data-stat]");
     if (!slider) return;
     const player = players.find(item => item.id === slider.closest("[data-id]").dataset.id);
@@ -941,7 +1264,7 @@ rosterElement.addEventListener("input", event => {
     const group = slider.closest(".stat-group");
     if (group) {
         const summaryRating = group.querySelector(".stat-group-heading strong");
-        const groupDefinition = statGroups.find(item => item.key === group.dataset.group);
+        const groupDefinition = allStatGroups.find(item => item.key === group.dataset.group);
         const rating = categoryRating(player, groupDefinition);
         summaryRating.textContent = rating;
         summaryRating.style.color = statColor(rating);
@@ -955,16 +1278,20 @@ rosterElement.addEventListener("input", event => {
     renderTeams();
 });
 
-rosterElement.addEventListener("click", event => {
+document.addEventListener("click", event => {
     const card = event.target.closest(".player-card");
     if (!card) return;
     const player = players.find(item => item.id === card.dataset.id);
     if (!player) return;
-    if (event.target.closest(".remove")) {
+    const growthButton = event.target.closest("[data-growth-node]");
+    if (growthButton) {
+        unlockGrowthNode(player, growthButton.dataset.growthNode);
+    } else if (event.target.closest(".remove")) {
         players.splice(players.indexOf(player), 1);
         savePlayers();
         renderRoster();
         invalidateTeams();
+        renderEvolution();
     } else if (event.target.closest(".edit")) {
         const nextName = prompt("Nome do jogador:", player.name);
         if (nextName === null) return;
@@ -975,6 +1302,7 @@ rosterElement.addEventListener("click", event => {
         savePlayers();
         renderRoster();
         renderTeams();
+        renderEvolution();
     }
 });
 
@@ -1036,13 +1364,28 @@ async function animateDraw(shuffled, nextTeams) {
 drawButton.addEventListener("click", () => {
     if (activeMatchId) return showToast("Este jogo já foi salvo. Comece um novo jogo para sortear novamente.");
     if (players.length < 2) return;
-    const shuffled = shuffle(players);
-    const nextTeams = [[], []];
-    shuffled.forEach((player, index) => nextTeams[index % 2].push(player));
+    const nextTeams = buildBalancedTeams(players);
+    const shuffled = shuffle(nextTeams.flat());
     animateDraw(shuffled, nextTeams);
 });
 
+function applyBalancedTeams() {
+    if (!players.length || activeMatchId) return;
+    teams = buildBalancedTeams(players);
+    selectedPlayerId = null;
+    comparisonPlayerIds = null;
+    selectionMode = "swap";
+    renderTeams();
+    playEffect("draw");
+    showToast("Times equilibrados pela nota geral.");
+}
+
 function handleTeamSelection(event) {
+    const balanceButton = event.target.closest("#balance-teams");
+    if (balanceButton) {
+        applyBalancedTeams();
+        return;
+    }
     const modeButton = event.target.closest("[data-selection-mode]");
     if (modeButton) {
         selectionMode = modeButton.dataset.selectionMode;
