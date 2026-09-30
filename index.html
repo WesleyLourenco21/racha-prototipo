@@ -21,7 +21,7 @@
         <a class="brand" href="#" aria-label="Racha, início"><img class="brand-logo" src="racha-escudo.svg" alt=""><span>Racha<small> / futebol entre amigos</small></span></a>
         <nav class="main-nav" aria-label="Navegação do Racha">
             <button class="nav-item" type="button" data-view-target="home" aria-current="page"><span aria-hidden="true">⌂</span>Início</button>
-            <button class="nav-item" type="button" data-view-target="match"><span aria-hidden="true">⚽</span>Racha</button>
+            <button class="nav-item" type="button" data-view-target="match"><span class="nav-ball" data-ball-icon aria-hidden="true"></span>Racha</button>
             <button class="nav-item" type="button" data-view-target="evolution"><span aria-hidden="true">✦</span>Evolução</button>
             <button class="nav-item" type="button" data-view-target="history"><span aria-hidden="true">◷</span>Histórico</button>
             <button class="nav-item" type="button" data-view-target="ranking"><span aria-hidden="true">▤</span>Ranking</button>
@@ -136,6 +136,10 @@
                             aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><circle cx="16" cy="5.5" r="3.2"/><path d="M11 10.5 8.5 12 6.8 19l3.8 1.2 1.2-4.1-.6 5.1h9.6l-.6-5.1 1.2 4.1 3.8-1.2-1.7-7-2.5-1.5-3-1.2h-4zM12 21.2l-.8 7M20 21.2l.8 7M10.8 12.2h10.4M15 11v8M18 11v8M22.4 12.8l3.1-.2.8 1.1-2.2 1.2"/></svg></span><span><strong>Sortear times</strong><small>Deixa a sorte decidir</small></span></button>
                             </div>
                 </div>
+                <div class="match-management" id="match-management">
+                    <label class="match-profile-select" for="active-player-profile"><span>Meu perfil</span><select id="active-player-profile"><option value="">Selecione seu perfil de jogador</option></select><small>Este perfil será o capitão ao sortear.</small></label>
+                    <fieldset class="setup-roles match-admins" id="match-admin-controls" hidden><legend>Admins de apoio</legend><div id="match-admin-options"></div><small>Escolha quem ajuda na organização deste racha.</small></fieldset>
+                </div>
                 <div id="teams-area"></div>
             </section>
         </div>
@@ -169,7 +173,7 @@
         <div class="draw-stage" role="status" aria-live="polite">
             <p class="eyebrow">A resenha vai começar</p>
             <h2 id="draw-stage-title">Sorteando os times</h2>
-            <span class="draw-ball" aria-hidden="true"><svg class="draw-ball-icon" viewBox="0 0 100 100" focusable="false"><defs><radialGradient id="ball-shell" cx="34%" cy="27%" r="76%"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#e7f0e3"/><stop offset="1" stop-color="#b9cbb7"/></radialGradient></defs><circle cx="50" cy="50" r="43" fill="url(#ball-shell)" stroke="#d3e7cf" stroke-width="2.5"/><path d="m50 32 16 12-6 19H40l-6-19z" fill="#14261a" stroke="#14261a" stroke-linejoin="round"/><path d="M50 32 49 8M66 44l22-8M60 63l14 20M40 63 26 83M34 44l-22-8M49 8l-17 3-10 8 4 15 18-2M88 36l-3-15-11-9-16-4-9 24M74 83l15-8 7-13-2-16-18-2-10 19M26 83l-14-8-7-13 2-16 18-2 15 19M12 36l-2-15 11-9 11-1M50 92l-15-3-9-6M50 92l15-3 9-6" fill="none" stroke="#263e2c" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/><path d="m49 32 1-24m16 36 22-8m-28 27 14 20M40 63 26 83M34 44l-22-8" fill="none" stroke="#a8ce73" stroke-linecap="round" stroke-width="1.8"/></svg></span>
+            <span class="draw-ball" aria-hidden="true"><svg class="draw-ball-icon" viewBox="0 0 100 100" focusable="false"><defs><radialGradient id="ball-shell" cx="34%" cy="27%" r="76%"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#f0f2ee"/><stop offset="1" stop-color="#c6ccc5"/></radialGradient></defs><circle cx="50" cy="50" r="43" fill="url(#ball-shell)" stroke="#d7ded7" stroke-width="2.5"/><path d="m50 32 16 12-6 19H40l-6-19z" fill="#18201a" stroke="#18201a" stroke-linejoin="round"/><path d="M50 32 49 8M66 44l22-8M60 63l14 20M40 63 26 83M34 44l-22-8M49 8l-17 3-10 8 4 15 18-2M88 36l-3-15-11-9-16-4-9 24M74 83l15-8 7-13-2-16-18-2-10 19M26 83l-14-8-7-13 2-16 18-2 15 19M12 36l-2-15 11-9 11-1M50 92l-15-3-9-6M50 92l15-3 9-6" fill="none" stroke="#344039" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/><path d="m49 32 1-24m16 36 22-8m-28 27 14 20M40 63 26 83M34 44l-22-8" fill="none" stroke="#aab3ab" stroke-linecap="round" stroke-width="1.8"/></svg></span>
             <p class="draw-player" id="draw-player">Preparando a escalação...</p>
             <span class="draw-arrow" aria-hidden="true">↓</span>
             <strong class="draw-destination" id="draw-destination">TIME A</strong>

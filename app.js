@@ -369,7 +369,7 @@ function loadMatches() {
 }
 
 function loadGameSetup() {
-    const defaults = { date: localDateKey(), time: "21:00", venue: "", fee: 0, mode: "resenha" };
+    const defaults = { date: localDateKey(), time: "21:00", venue: "", fee: 0, mode: "resenha", captainId: "", adminIds: [] };
     try {
         const saved = JSON.parse(localStorage.getItem(GAME_SETUP_KEY) || "{}");
         return {
@@ -377,7 +377,9 @@ function loadGameSetup() {
             time: /^\d{2}:\d{2}$/.test(saved.time || "") ? saved.time : defaults.time,
             venue: typeof saved.venue === "string" ? saved.venue.slice(0, 60) : defaults.venue,
             fee: Number.isFinite(Number(saved.fee)) ? Math.max(0, Number(saved.fee)) : defaults.fee,
-            mode: saved.mode === "professional" ? "professional" : defaults.mode
+            mode: saved.mode === "professional" ? "professional" : defaults.mode,
+            captainId: typeof saved.captainId === "string" ? saved.captainId : defaults.captainId,
+            adminIds: Array.isArray(saved.adminIds) ? [...new Set(saved.adminIds.filter(id => typeof id === "string"))] : defaults.adminIds
         };
     } catch {
         return defaults;
@@ -760,7 +762,7 @@ function getRankingEntries(period) {
 }
 
 function renderRankingTable(entries) {
-    if (!entries.length) return '<div class="data-empty"><span aria-hidden="true">⚽</span><p>Nenhum gol ou assistência registrado neste período.</p></div>';
+    if (!entries.length) return `<div class="data-empty"><span class="ranking-empty-ball" aria-hidden="true">${renderPitchBall("ranking-empty-shell")}</span><p>Nenhum gol ou assistência registrado neste período.</p></div>`;
     return `<div class="table-scroll"><table class="ranking-table"><thead><tr><th>#</th><th>Jogador</th><th>Jogos</th><th>Gols</th><th>Assist.</th></tr></thead><tbody>${entries.map((entry, index) => `<tr><td><span class="ranking-position ${index < 3 ? `position-${index + 1}` : ""}">${String(index + 1).padStart(2, "0")}</span></td><th scope="row">${escapeHtml(entry.name)}</th><td>${entry.games}</td><td class="ranking-goals">${entry.goals}</td><td>${entry.assists}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
@@ -883,6 +885,8 @@ function saveMatchResult() {
         venue: setup.venue,
         fee: setup.fee,
         mode: setup.mode || matchMode,
+        captainId: setup.captainId || "",
+        adminIds: setup.adminIds || [],
         teams: teams.map(team => team.map(player => player.id)),
         participants,
         stats,
@@ -931,9 +935,48 @@ function readGameSetup() {
         time: document.querySelector("#game-time").value,
         venue: document.querySelector("#game-venue").value.trim(),
         fee: Math.max(0, Number(document.querySelector("#game-fee").value) || 0),
-        mode: matchMode
+        mode: matchMode,
+        captainId: gameSetup.captainId || "",
+        adminIds: gameSetup.adminIds || []
     };
     saveGameSetup();
+}
+
+function renderGameRoleControls() {
+    const captainSelect = document.querySelector("#active-player-profile");
+    if (!captainSelect) return;
+    const setup = activeMatchSetup || gameSetup;
+    captainSelect.innerHTML = `<option value="">Selecione seu perfil de jogador</option>${players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join("")}`;
+    captainSelect.value = players.some(player => player.id === setup.captainId) ? setup.captainId : "";
+    const adminPlayers = players.filter(player => player.id !== captainSelect.value);
+    document.querySelector("#match-admin-options").innerHTML = adminPlayers.length
+        ? adminPlayers.map(player => `<label class="admin-option"><input type="checkbox" name="match-admin" value="${player.id}" ${(setup.adminIds || []).includes(player.id) ? "checked" : ""}><span>${escapeHtml(player.name)}</span></label>`).join("")
+        : '<span class="admin-empty">Cadastre jogadores para escolher admins.</span>';
+    document.querySelector("#match-admin-controls").hidden = !teams;
+}
+
+function readMatchRoles() {
+    const captainId = document.querySelector("#active-player-profile").value;
+    const adminIds = [...document.querySelectorAll('input[name="match-admin"]:checked')].map(input => input.value).filter(id => id !== captainId);
+    Object.assign(gameSetup, { captainId, adminIds });
+    if (activeMatchSetup) Object.assign(activeMatchSetup, { captainId, adminIds });
+    saveGameSetup();
+}
+
+function handleMatchRoleChange(event) {
+    readMatchRoles();
+    if (event.target.id === "active-player-profile") renderGameRoleControls();
+    if (event.target.name === "match-admin") renderTeams();
+}
+
+function renderMatchDetails() {
+    const setup = activeMatchSetup || gameSetup;
+    const captain = players.find(player => player.id === setup.captainId);
+    const admins = (setup.adminIds || []).map(id => players.find(player => player.id === id)).filter(Boolean);
+    return `<section class="match-details" aria-label="Dados e organização do jogo">
+        <div><span>DATA E HORÁRIO</span><strong>${formatMatchDate(setup.date)} · ${escapeHtml(setup.time || "Horário a definir")}</strong><small>${escapeHtml(setup.venue || "Local a definir")}</small></div>
+        <div><span>CAPITÃO</span><strong>${captain ? escapeHtml(captain.name) : "A definir"}</strong><small>${admins.length ? `Admins: ${admins.map(player => escapeHtml(player.name)).join(", ")}` : "Admins de apoio não definidos"}</small></div>
+    </section>`;
 }
 
 function startNewMatch() {
@@ -952,10 +995,12 @@ function startNewMatch() {
 
 function initializeDashboard() {
     document.querySelector("#session-ball").innerHTML = renderPitchBall("session-ball-shell");
+    document.querySelectorAll("[data-ball-icon]").forEach(element => { element.innerHTML = renderPitchBall(`nav-ball-${element.parentElement.dataset.viewTarget}`); });
     document.querySelector("#game-date").value = gameSetup.date;
     document.querySelector("#game-time").value = gameSetup.time;
     document.querySelector("#game-venue").value = gameSetup.venue;
     document.querySelector("#game-fee").value = gameSetup.fee || "";
+    renderGameRoleControls();
     document.querySelectorAll(".match-mode-button").forEach(button => {
         button.setAttribute("aria-pressed", String(button.dataset.matchMode === matchMode));
         button.addEventListener("click", () => updateMatchMode(button.dataset.matchMode));
@@ -969,6 +1014,8 @@ function initializeDashboard() {
         if (viewButton) showAppView(viewButton.dataset.viewTarget);
     });
     document.querySelector("#setup-form").addEventListener("input", readGameSetup);
+    document.querySelector("#setup-form").addEventListener("change", readGameSetup);
+    document.querySelector("#match-management").addEventListener("change", handleMatchRoleChange);
     document.querySelector("#setup-form").addEventListener("submit", event => {
         event.preventDefault();
         startNewMatch();
@@ -994,6 +1041,7 @@ function initializeDashboard() {
         selectedPlayerId = null;
         comparisonPlayerIds = null;
         selectionMode = "swap";
+        renderGameRoleControls();
         renderTeams();
         showToast("Escalação limpa. Os jogadores continuam na lista.");
     });
@@ -1081,6 +1129,7 @@ function invalidateTeams() {
 }
 
 function renderRoster() {
+    renderGameRoleControls();
     document.querySelector("#roster-count").textContent = players.length;
     document.querySelector("#summary-count").textContent = `${players.length} ${players.length === 1 ? "jogador" : "jogadores"}`;
     drawButton.disabled = players.length < 2;
@@ -1118,13 +1167,14 @@ function renderEvolution() {
 }
 
 function renderPitchBall(gradientId = "pitch-ball-shell") {
-    return `<svg class="pitch-ball-icon" viewBox="0 0 100 100" focusable="false"><defs><radialGradient id="${gradientId}" cx="34%" cy="27%" r="76%"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#e7f0e3"/><stop offset="1" stop-color="#b9cbb7"/></radialGradient></defs><circle cx="50" cy="50" r="43" fill="url(#${gradientId})" stroke="#d3e7cf" stroke-width="2.5"/><path d="m50 32 16 12-6 19H40l-6-19z" fill="#14261a" stroke="#14261a" stroke-linejoin="round"/><path d="M50 32 49 8M66 44l22-8M60 63l14 20M40 63 26 83M34 44l-22-8M49 8l-17 3-10 8 4 15 18-2M88 36l-3-15-11-9-16-4-9 24M74 83l15-8 7-13-2-16-18-2-10 19M26 83l-14-8-7-13 2-16 18-2 15 19M12 36l-2-15 11-9 11-1M50 92l-15-3-9-6M50 92l15-3 9-6" fill="none" stroke="#263e2c" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/><path d="m49 32 1-24m16 36 22-8m-28 27 14 20M40 63 26 83M34 44l-22-8" fill="none" stroke="#a8ce73" stroke-linecap="round" stroke-width="1.8"/></svg>`;
+    return `<svg class="pitch-ball-icon" viewBox="0 0 100 100" focusable="false"><defs><radialGradient id="${gradientId}" cx="34%" cy="27%" r="76%"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#f0f2ee"/><stop offset="1" stop-color="#c6ccc5"/></radialGradient></defs><circle cx="50" cy="50" r="43" fill="url(#${gradientId})" stroke="#d7ded7" stroke-width="2.5"/><path d="m50 32 16 12-6 19H40l-6-19z" fill="#18201a" stroke="#18201a" stroke-linejoin="round"/><path d="M50 32 49 8M66 44l22-8M60 63l14 20M40 63 26 83M34 44l-22-8M49 8l-17 3-10 8 4 15 18-2M88 36l-3-15-11-9-16-4-9 24M74 83l15-8 7-13-2-16-18-2-10 19M26 83l-14-8-7-13 2-16 18-2 15 19M12 36l-2-15 11-9 11-1M50 92l-15-3-9-6M50 92l15-3 9-6" fill="none" stroke="#344039" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/><path d="m49 32 1-24m16 36 22-8m-28 27 14 20M40 63 26 83M34 44l-22-8" fill="none" stroke="#aab3ab" stroke-linecap="round" stroke-width="1.8"/></svg>`;
 }
 
 function renderTeams() {
     document.querySelector("#clear-teams").disabled = !teams || Boolean(activeMatchId);
+    document.querySelector("#match-admin-controls").hidden = !teams;
     if (!teams) {
-        teamsArea.innerHTML = `<div class="team-empty"><span class="pitch-icon" aria-hidden="true">${renderPitchBall()}</span><p>Adicione os jogadores e sorteie os times para ver as escalações.</p></div>`;
+        teamsArea.innerHTML = `${renderMatchDetails()}<div class="team-empty"><span class="pitch-icon" aria-hidden="true">${renderPitchBall()}</span><p>Adicione os jogadores e sorteie os times para ver as escalações.</p></div>`;
         document.querySelector("#team-description").textContent = players.length > 0 ? "Sorteie novamente para montar as equipes." : "Seu próximo sorteio aparece aqui.";
         renderMatchRecording();
         return;
@@ -1139,7 +1189,7 @@ function renderTeams() {
         ? selectedPlayerId ? "Agora escolha outro jogador para comparar." : comparisonPlayerIds ? "Escolha outra dupla ou troque de modo." : "Escolha dois jogadores de qualquer time."
         : selectedPlayerId ? "Agora escolha alguém do outro time para concluir a troca." : "Selecione um jogador de cada time para trocar.";
     document.querySelector("#team-description").textContent = `${teamTotal} jogadores distribuídos, sem deixar ninguém de fora.`;
-    teamsArea.innerHTML = `<section class="match-summary" aria-label="Resumo do confronto">
+    teamsArea.innerHTML = `${renderMatchDetails()}<section class="match-summary" aria-label="Resumo do confronto">
         <div class="match-summary-heading"><span><i aria-hidden="true"></i> Escalação definida</span><strong>${teamTotal} jogadores</strong></div>
         <div class="match-result" aria-label="Nota geral: Time A ${teamRatings[0]}, Time B ${teamRatings[1]}">
             <div class="result-team result-a"><span>Time A</span><strong>${teamRatings[0]}<small>GER</small></strong></div>
@@ -1157,8 +1207,10 @@ function renderTeams() {
         <div class="team-title"><h3><span class="team-dot"></span>Time ${teamIndex === 0 ? "A" : "B"}</h3><span class="team-meta"><span>${team.length} ${team.length === 1 ? "jogador" : "jogadores"}</span><strong>${teamRatings[teamIndex]} GER</strong></span></div>
         <div class="team-players">${team.map((player, playerIndex) => {
                         const actionLabel = selectionMode === "compare" ? `Selecionar ${player.name} para comparação` : selectedPlayerId ? `Trocar ${player.name} de time` : `Selecionar ${player.name} para troca`;
-                        return `<article class="team-player tier-${ratingTier(calculateOverall(player))} ${selectedPlayerId === player.id ? "selected" : ""} ${selectedPlayerId ? "selectable" : ""}" style="--player-index: ${playerIndex}" data-id="${player.id}" data-team="${teamIndex}" role="group" tabindex="0" aria-label="${escapeHtml(actionLabel)}">
-                                <div class="player-top"><span class="team-player-identity"><span class="player-name">${escapeHtml(player.name)}</span></span><span class="team-player-rating">${renderStarRating(calculateStars(player))}${renderOverall(player)}</span></div>
+                        const isGoalkeeper = (player.quickProfile || []).includes("goleiro");
+                        const roleLabel = player.id === (activeMatchSetup || gameSetup).captainId ? "CAPITÃO" : ((activeMatchSetup || gameSetup).adminIds || []).includes(player.id) ? "ADMIN" : "";
+                        return `<article class="team-player tier-${ratingTier(calculateOverall(player))} ${isGoalkeeper ? "goalkeeper-card" : ""} ${selectedPlayerId === player.id ? "selected" : ""} ${selectedPlayerId ? "selectable" : ""}" style="--player-index: ${playerIndex}" data-id="${player.id}" data-team="${teamIndex}" role="group" tabindex="0" aria-label="${escapeHtml(actionLabel)}${isGoalkeeper ? ", goleiro" : ""}${roleLabel ? `, ${roleLabel.toLocaleLowerCase("pt-BR")}` : ""}">
+                            <div class="player-top"><span class="team-player-identity"><span class="player-name">${escapeHtml(player.name)}</span>${roleLabel ? `<span class="player-role-badge">${roleLabel}</span>` : ""}${isGoalkeeper ? '<span class="goalkeeper-badge">GOLEIRO</span>' : ""}</span><span class="team-player-rating">${renderStarRating(calculateStars(player))}${renderOverall(player)}</span></div>
                 <div class="quick-profile-pill team-specialties">${escapeHtml(getQuickProfileLabel(player.quickProfile || ["geral"]))}${matchMode === "professional" ? ` · Pé fraco ${player.weakFoot}/5` : ""}</div>
           </article>`;
         }).join("")}</div>
@@ -1352,6 +1404,7 @@ async function animateDraw(shuffled, nextTeams) {
     selectedPlayerId = null;
     comparisonPlayerIds = null;
     selectionMode = "swap";
+    renderGameRoleControls();
     renderTeams();
     overlay.classList.remove("is-active");
     overlay.setAttribute("aria-hidden", "true");
@@ -1364,6 +1417,7 @@ async function animateDraw(shuffled, nextTeams) {
 drawButton.addEventListener("click", () => {
     if (activeMatchId) return showToast("Este jogo já foi salvo. Comece um novo jogo para sortear novamente.");
     if (players.length < 2) return;
+    if (!gameSetup.captainId || !players.some(player => player.id === gameSetup.captainId)) return showToast("Escolha seu perfil no Racha para ser o capitão deste sorteio.");
     const nextTeams = buildBalancedTeams(players);
     const shuffled = shuffle(nextTeams.flat());
     animateDraw(shuffled, nextTeams);
