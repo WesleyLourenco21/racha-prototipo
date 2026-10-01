@@ -22,9 +22,8 @@
         <nav class="main-nav" aria-label="Navegação do Racha">
             <button class="nav-item" type="button" data-view-target="home" aria-current="page"><span aria-hidden="true">⌂</span>Início</button>
             <button class="nav-item" type="button" data-view-target="match"><span class="nav-ball" data-ball-icon aria-hidden="true"></span>Racha</button>
-            <button class="nav-item" type="button" data-view-target="evolution"><span aria-hidden="true">✦</span>Evolução</button>
+            <button class="nav-item" type="button" data-view-target="professional"><span aria-hidden="true">♜</span>Profissional</button>
             <button class="nav-item" type="button" data-view-target="history"><span aria-hidden="true">◷</span>Histórico</button>
-            <button class="nav-item" type="button" data-view-target="ranking"><span aria-hidden="true">▤</span>Ranking</button>
             <button class="nav-item" type="button" data-view-target="payments"><span aria-hidden="true">R$</span>Pagamentos</button>
         </nav>
         <div class="top-note">Salvo automaticamente neste navegador</div>
@@ -56,7 +55,7 @@
                     <p class="setup-note">Dados do jogo e pagamentos ficam salvos neste navegador.</p>
                 </section>
                 <section class="home-panel home-rank-panel" aria-labelledby="today-rank-heading">
-                    <div class="home-panel-head"><div><p class="eyebrow">Artilharia</p><h2 id="today-rank-heading">Destaques de hoje</h2></div><button class="text-action" type="button" data-view-target="ranking">Ver ranking →</button></div>
+                    <div class="home-panel-head"><div><p class="eyebrow">Artilharia</p><h2 id="today-rank-heading">Destaques de hoje</h2></div><button class="text-action" type="button" data-professional-tab-target="ranking">Ver ranking →</button></div>
                     <div id="home-today-leaders" class="home-leaders"></div>
                 </section>
             </div>
@@ -76,11 +75,7 @@
             <div class="session-pill"><span class="session-ball" id="session-ball" aria-hidden="true"></span><strong id="summary-count">0 jogadores</strong></div>
         </section>
         <section class="match-mode" aria-label="Modo do racha">
-            <div class="match-mode-copy"><strong>Modo do jogo</strong><span id="match-mode-description">Notas iguais para um jogo leve entre amigos.</span></div>
-            <div class="match-mode-toggle" role="group" aria-label="Escolha o modo do racha">
-                <button class="match-mode-button" type="button" data-match-mode="resenha" aria-pressed="true">Racha Resenha</button>
-                <button class="match-mode-button" type="button" data-match-mode="professional" aria-pressed="false">Racha Profissional</button>
-            </div>
+            <div class="match-mode-copy"><strong>Racha Resenha</strong><span id="match-mode-description">Monte as equipes e organize a partida entre amigos.</span></div>
         </section>
         <div class="workspace">
             <section class="panel" aria-labelledby="roster-heading">
@@ -124,6 +119,7 @@
                         placeholder="Um nome por linha ou separados por vírgula"></textarea><button type="button"
                         id="bulk-add">Adicionar nomes</button>
                 </details>
+                <p class="goalkeeper-selection-note" id="goalkeeper-selection-note">Goleiros para este sorteio: 0/2 selecionados.</p>
                 <div class="roster" id="roster" aria-live="polite"></div>
             </section>
             <section class="panel teams-panel" aria-labelledby="teams-heading">
@@ -136,30 +132,44 @@
                             aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><circle cx="16" cy="5.5" r="3.2"/><path d="M11 10.5 8.5 12 6.8 19l3.8 1.2 1.2-4.1-.6 5.1h9.6l-.6-5.1 1.2 4.1 3.8-1.2-1.7-7-2.5-1.5-3-1.2h-4zM12 21.2l-.8 7M20 21.2l.8 7M10.8 12.2h10.4M15 11v8M18 11v8M22.4 12.8l3.1-.2.8 1.1-2.2 1.2"/></svg></span><span><strong>Sortear times</strong><small>Deixa a sorte decidir</small></span></button>
                             </div>
                 </div>
-                <div class="match-management" id="match-management">
-                    <label class="match-profile-select" for="active-player-profile"><span>Meu perfil</span><select id="active-player-profile"><option value="">Selecione seu perfil de jogador</option></select><small>Este perfil será o capitão ao sortear.</small></label>
-                    <fieldset class="setup-roles match-admins" id="match-admin-controls" hidden><legend>Admins de apoio</legend><div id="match-admin-options"></div><small>Escolha quem ajuda na organização deste racha.</small></fieldset>
-                </div>
                 <div id="teams-area"></div>
             </section>
         </div>
         <section id="match-recording" class="match-recording" aria-live="polite"></section>
         </section>
 
-        <section class="app-view data-view evolution-view" id="evolution-view" aria-labelledby="evolution-heading">
-            <header class="data-view-head"><div><p class="eyebrow">Desenvolvimento dos jogadores</p><h1 id="evolution-heading">Evolução.</h1><p class="subtitle">Aprimore habilidades e acompanhe cada trilha até o Card Premium.</p></div></header>
-            <div id="evolution-roster" class="evolution-roster"></div>
+        <section class="app-view data-view professional-view" id="professional-view" aria-labelledby="professional-heading">
+            <header class="data-view-head"><div><p class="eyebrow">Gestão de equipes</p><h1 id="professional-heading">Racha Profissional.</h1><p class="subtitle">Equipes independentes, sob responsabilidade de seus capitães.</p></div></header>
+            <nav class="professional-tabs" role="tablist" aria-label="Seções do Racha Profissional">
+                <button type="button" role="tab" id="professional-teams-tab" aria-controls="professional-teams-panel" aria-selected="true" data-professional-tab-target="teams">Equipes</button>
+                <button type="button" role="tab" id="professional-evolution-tab" aria-controls="professional-evolution-panel" aria-selected="false" data-professional-tab-target="evolution">Evolução</button>
+                <button type="button" role="tab" id="professional-ranking-tab" aria-controls="professional-ranking-panel" aria-selected="false" data-professional-tab-target="ranking">Ranking</button>
+            </nav>
+            <section class="professional-tab-panel" id="professional-teams-panel" role="tabpanel" aria-labelledby="professional-teams-tab">
+                <section class="professional-setup" aria-label="Criar equipe de teste">
+                    <form id="professional-team-form" class="professional-team-form">
+                        <label>Nome da equipe<input id="professional-team-name" type="text" maxlength="32" placeholder="Ex.: União da Quadra" required></label>
+                        <label>Capitão<select id="professional-team-captain" required><option value="">Selecione um jogador</option></select></label>
+                        <button class="primary" type="submit">Criar equipe</button>
+                    </form>
+                    <p>Perfis de demonstração: cadastre jogadores na seção Racha para adicioná-los às equipes.</p>
+                </section>
+                <div class="professional-team-list" id="professional-team-list" aria-live="polite"></div>
+            </section>
+            <section class="professional-tab-panel data-view" id="professional-evolution-panel" role="tabpanel" aria-labelledby="professional-evolution-tab" hidden>
+                <header class="data-view-head"><div><p class="eyebrow">Desenvolvimento dos jogadores</p><h2 id="evolution-heading">Evolução.</h2><p class="subtitle">Aprimore habilidades e acompanhe cada trilha até o Card Premium.</p></div></header>
+                <div id="evolution-roster" class="evolution-roster"></div>
+            </section>
+            <section class="professional-tab-panel data-view" id="professional-ranking-panel" role="tabpanel" aria-labelledby="professional-ranking-tab" hidden>
+                <header class="data-view-head"><div><p class="eyebrow">Quem está voando</p><h2 id="ranking-heading">Ranking.</h2><p class="subtitle">Gols e assistências registrados nas partidas.</p></div></header>
+                <div class="ranking-period" role="group" aria-label="Período do ranking"><button type="button" data-ranking-period="day" aria-pressed="true">Hoje</button><button type="button" data-ranking-period="month" aria-pressed="false">Este mês</button></div>
+                <div id="ranking-list" class="ranking-list"></div>
+            </section>
         </section>
 
         <section class="app-view data-view" id="history-view" aria-labelledby="history-heading">
             <header class="data-view-head"><div><p class="eyebrow">Jogos registrados</p><h1 id="history-heading">Histórico do racha.</h1><p class="subtitle">Resultados, gols e assistências de cada partida.</p></div></header>
             <div id="history-list" class="history-list"></div>
-        </section>
-
-        <section class="app-view data-view" id="ranking-view" aria-labelledby="ranking-heading">
-            <header class="data-view-head"><div><p class="eyebrow">Quem está voando</p><h1 id="ranking-heading">Ranking.</h1><p class="subtitle">Gols e assistências registrados nas partidas.</p></div></header>
-            <div class="ranking-period" role="group" aria-label="Período do ranking"><button type="button" data-ranking-period="day" aria-pressed="true">Hoje</button><button type="button" data-ranking-period="month" aria-pressed="false">Este mês</button></div>
-            <div id="ranking-list" class="ranking-list"></div>
         </section>
 
         <section class="app-view data-view" id="payments-view" aria-labelledby="payments-heading">
@@ -171,13 +181,16 @@
     <div class="toast" id="toast" role="status" hidden></div>
     <div class="draw-overlay" id="draw-overlay" aria-hidden="true">
         <div class="draw-stage" role="status" aria-live="polite">
-            <p class="eyebrow">A resenha vai começar</p>
-            <h2 id="draw-stage-title">Sorteando os times</h2>
-            <span class="draw-ball" aria-hidden="true"><svg class="draw-ball-icon" viewBox="0 0 100 100" focusable="false"><defs><radialGradient id="ball-shell" cx="34%" cy="27%" r="76%"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#f0f2ee"/><stop offset="1" stop-color="#c6ccc5"/></radialGradient></defs><circle cx="50" cy="50" r="43" fill="url(#ball-shell)" stroke="#d7ded7" stroke-width="2.5"/><path d="m50 32 16 12-6 19H40l-6-19z" fill="#18201a" stroke="#18201a" stroke-linejoin="round"/><path d="M50 32 49 8M66 44l22-8M60 63l14 20M40 63 26 83M34 44l-22-8M49 8l-17 3-10 8 4 15 18-2M88 36l-3-15-11-9-16-4-9 24M74 83l15-8 7-13-2-16-18-2-10 19M26 83l-14-8-7-13 2-16 18-2 15 19M12 36l-2-15 11-9 11-1M50 92l-15-3-9-6M50 92l15-3 9-6" fill="none" stroke="#344039" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/><path d="m49 32 1-24m16 36 22-8m-28 27 14 20M40 63 26 83M34 44l-22-8" fill="none" stroke="#aab3ab" stroke-linecap="round" stroke-width="1.8"/></svg></span>
-            <p class="draw-player" id="draw-player">Preparando a escalação...</p>
-            <span class="draw-arrow" aria-hidden="true">↓</span>
-            <strong class="draw-destination" id="draw-destination">TIME A</strong>
-            <span class="draw-progress" id="draw-progress"></span>
+            <header class="draw-stage-heading"><div><p class="eyebrow">RACHA · SORTEIO OFICIAL</p><h2 id="draw-stage-title">Distribuindo as equipes</h2></div><span class="draw-live-indicator"><i aria-hidden="true"></i> AO VIVO</span></header>
+            <div class="draw-reveal">
+                <span class="draw-ball" aria-hidden="true"><svg class="draw-ball-icon" viewBox="0 0 100 100" focusable="false"><defs><radialGradient id="ball-shell" cx="34%" cy="27%" r="76%"><stop offset="0" stop-color="#fff"/><stop offset=".72" stop-color="#f0f2ee"/><stop offset="1" stop-color="#c6ccc5"/></radialGradient></defs><circle cx="50" cy="50" r="43" fill="url(#ball-shell)" stroke="#d7ded7" stroke-width="2.5"/><path d="m50 32 16 12-6 19H40l-6-19z" fill="#18201a" stroke="#18201a" stroke-linejoin="round"/><path d="M50 32 49 8M66 44l22-8M60 63l14 20M40 63 26 83M34 44l-22-8M49 8l-17 3-10 8 4 15 18-2M88 36l-3-15-11-9-16-4-9 24M74 83l15-8 7-13-2-16-18-2-10 19M26 83l-14-8-7-13 2-16 18-2 15 19M12 36l-2-15 11-9 11-1M50 92l-15-3-9-6M50 92l15-3 9-6" fill="none" stroke="#344039" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/><path d="m49 32 1-24m16 36 22-8m-28 27 14 20M40 63 26 83M34 44l-22-8" fill="none" stroke="#aab3ab" stroke-linecap="round" stroke-width="1.8"/></svg></span>
+                <div class="draw-current-player"><span id="draw-destination" class="draw-destination">TIME A</span><strong class="draw-player" id="draw-player">Preparando a escalação...</strong><span class="draw-progress" id="draw-progress">Aguardando o primeiro nome</span></div>
+            </div>
+            <div class="draw-team-board" aria-label="Escalações sendo reveladas">
+                <section class="draw-team-card draw-team-a"><header><span class="draw-team-mark">A</span><div><strong>TIME A</strong><small><b id="draw-team-a-count">0</b> no elenco</small></div></header><ol id="draw-team-a-roster" aria-label="Jogadores do Time A"></ol></section>
+                <section class="draw-team-card draw-team-b"><header><span class="draw-team-mark">B</span><div><strong>TIME B</strong><small><b id="draw-team-b-count">0</b> no elenco</small></div></header><ol id="draw-team-b-roster" aria-label="Jogadores do Time B"></ol></section>
+            </div>
+            <div class="draw-progress-track" aria-hidden="true"><span id="draw-progress-bar"></span></div>
         </div>
     </div>
     <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title">
@@ -194,10 +207,12 @@
                     <label for="crowd-audio-file"><strong>Áudio da torcida</strong><small id="crowd-audio-name">Opcional: carregue um canto ou torcida do aparelho.</small></label>
                     <div class="setting-file-actions"><input id="crowd-audio-file" type="file" accept="audio/*"><button id="crowd-audio-preview" class="audio-preview" type="button">Ouvir</button></div>
                 </div>
-                <label class="setting-row" for="music-toggle"><span><strong>Som de estádio</strong><small>Torcida gravada no Maracanã</small></span><input id="music-toggle" type="checkbox" class="setting-toggle"></label>
+                <label class="setting-row" for="music-toggle"><span><strong>Música da torcida</strong><small>Escolha uma faixa para acompanhar o racha</small></span><input id="music-toggle" type="checkbox" class="setting-toggle"></label>
+                <label class="setting-select" for="music-track"><span>Faixa</span><select id="music-track"><option value="assets/audio/Torça Com a gente.mp3">Torça Com a gente</option><option value="assets/audio/Torcida em Alta.mp3">Torcida em Alta</option></select></label>
                 <label class="setting-range" for="music-volume"><span>Música</span><output id="music-volume-value" for="music-volume">18%</output><input id="music-volume" type="range" min="0" max="100" step="1"></label>
+                <small class="audio-limit-note">Volume máximo limitado para manter o som ambiente.</small>
                 <div class="setting-file-block">
-                    <label for="music-audio-file"><strong>Sua trilha</strong><small id="music-audio-name">Opcional: use uma música do seu aparelho.</small></label>
+                    <label for="music-audio-file"><strong>Faixa do aparelho</strong><small id="music-audio-name">Opcional: substitua a faixa selecionada nesta sessão.</small></label>
                     <input id="music-audio-file" type="file" accept="audio/*">
                 </div>
             </section>

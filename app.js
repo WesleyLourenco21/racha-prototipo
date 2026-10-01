@@ -4,6 +4,67 @@ const STORAGE_KEY = "racha.players.v1";
 const SETTINGS_KEY = "racha.settings.v1";
 const MATCHES_KEY = "racha.matches.v1";
 const GAME_SETUP_KEY = "racha.game-setup.v1";
+const PROFESSIONAL_TEAMS_KEY = "racha.professional-teams.v1";
+const TEST_SESSION_KEY = "racha.test-session.v1";
+const TEST_SESSION_TAB_KEY = "racha.test-session-tab.v1";
+const TEST_SESSION_ACTIVITY_KEY = "racha.test-session-activity.v1";
+const DEVELOPMENT_TEST_RESET = true;
+const TEST_SESSION_TAB_TTL = 90000;
+const musicTracks = ["assets/audio/Torça Com a gente.mp3", "assets/audio/Torcida em Alta.mp3"];
+
+function getActiveDevelopmentTabs() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(TEST_SESSION_ACTIVITY_KEY) || "[]");
+        if (!Array.isArray(saved)) return [];
+        return saved.filter(tab => tab && typeof tab.id === "string" && Date.now() - Number(tab.lastSeen) < TEST_SESSION_TAB_TTL);
+    } catch {
+        return [];
+    }
+}
+
+function markDevelopmentSessionActive() {
+    if (!DEVELOPMENT_TEST_RESET) return;
+    try {
+        const tabId = sessionStorage.getItem(TEST_SESSION_TAB_KEY) || createId();
+        sessionStorage.setItem(TEST_SESSION_TAB_KEY, tabId);
+        const activeTabs = getActiveDevelopmentTabs().filter(tab => tab.id !== tabId);
+        activeTabs.push({ id: tabId, lastSeen: Date.now() });
+        localStorage.setItem(TEST_SESSION_ACTIVITY_KEY, JSON.stringify(activeTabs));
+    } catch {}
+}
+
+function markDevelopmentSessionClosed() {
+    try {
+        const tabId = sessionStorage.getItem(TEST_SESSION_TAB_KEY);
+        if (!tabId) return;
+        const activeTabs = getActiveDevelopmentTabs().filter(tab => tab.id !== tabId);
+        localStorage.setItem(TEST_SESSION_ACTIVITY_KEY, JSON.stringify(activeTabs));
+    } catch {}
+}
+
+function resetDevelopmentSession() {
+    if (!DEVELOPMENT_TEST_RESET) return;
+    try {
+        if (sessionStorage.getItem(TEST_SESSION_KEY) === "initialized") {
+            markDevelopmentSessionActive();
+            return;
+        }
+        if (getActiveDevelopmentTabs().length === 0) {
+            [STORAGE_KEY, MATCHES_KEY, GAME_SETUP_KEY, PROFESSIONAL_TEAMS_KEY].forEach(key => localStorage.removeItem(key));
+        }
+        sessionStorage.setItem(TEST_SESSION_KEY, "initialized");
+        markDevelopmentSessionActive();
+    } catch {}
+}
+
+resetDevelopmentSession();
+window.setInterval(markDevelopmentSessionActive, 25000);
+window.addEventListener("pageshow", markDevelopmentSessionActive);
+window.addEventListener("pagehide", markDevelopmentSessionClosed);
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) markDevelopmentSessionActive();
+});
+document.addEventListener("pointerdown", markDevelopmentSessionActive);
 const legacyGroupIndexes = { shooting: 0, passing: 1, dribbling: 2, defending: 3, physical: 4 };
 const previousProfileDefaults = { pace: 92, acceleration: 89, sprintSpeed: 95, shooting: 76, attPosition: 86, finishing: 78, shotPower: 74, longShots: 75, volleys: 73, penalties: 59, passing: 78, vision: 79, crossing: 81, freeKickAcc: 64, shortPass: 83, longPass: 64, curve: 80, dribbling: 84, agility: 88, balance: 64, reactions: 81, ballControl: 85, dribblingSkill: 86, composure: 79, defending: 39, interceptions: 39, headingAcc: 69, defAware: 34, standTackle: 39, slideTackle: 28, physical: 67, jumping: 79, stamina: 75, strength: 64, aggression: 60 };
 const statGroups = [
@@ -27,6 +88,7 @@ const teamsArea = document.querySelector("#teams-area");
 const recordingArea = document.querySelector("#match-recording");
 const drawButton = document.querySelector("#draw-button");
 let teams = null;
+let teamCaptainIds = [null, null];
 let selectedPlayerId = null;
 let comparisonPlayerIds = null;
 let selectionMode = "swap";
@@ -40,7 +102,6 @@ let stadiumAudio = null;
 let audioPreloadPromise;
 const bundledAudioUrls = new Map();
 const bundledAudioPaths = [
-    "assets/audio/maracana-crowd.mp3",
     "assets/audio/football-crowd-cheer.mp3",
     "assets/audio/referee-whistle.mp3"
 ];
@@ -61,9 +122,10 @@ let matchMode = gameSetup.mode;
 let activeMatchSetup = null;
 let activeMatchId = null;
 let rankingPeriod = "day";
+let activeProfessionalTab = "teams";
 
 function loadAudioSettings() {
-    const defaults = { effectsEnabled: true, effectsVolume: 45, musicEnabled: false, musicVolume: 18, theme: "gramado", mode: "dark" };
+    const defaults = { effectsEnabled: true, effectsVolume: 35, musicEnabled: false, musicVolume: 32, musicTrack: musicTracks[0], theme: "gramado", mode: "dark" };
     try {
         const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
         return {
@@ -71,6 +133,7 @@ function loadAudioSettings() {
             effectsVolume: clampVolume(saved.effectsVolume ?? defaults.effectsVolume),
             musicEnabled: saved.musicEnabled === true,
             musicVolume: clampVolume(saved.musicVolume ?? defaults.musicVolume),
+            musicTrack: musicTracks.includes(saved.musicTrack) ? saved.musicTrack : defaults.musicTrack,
             theme: Object.hasOwn(themePalettes, saved.theme) ? saved.theme : defaults.theme,
             mode: saved.mode === "light" ? "light" : defaults.mode
         };
@@ -117,8 +180,9 @@ function updateAudioControls() {
     document.querySelector("#music-toggle").checked = audioSettings.musicEnabled;
     document.querySelector("#music-volume").value = audioSettings.musicVolume;
     document.querySelector("#music-volume-value").textContent = `${audioSettings.musicVolume}%`;
+    document.querySelector("#music-track").value = audioSettings.musicTrack;
     document.querySelector("#crowd-audio-name").textContent = customCrowdUrl ? "Áudio carregado; toca ao sortear ou trocar times." : "Opcional: carregue um canto ou torcida do aparelho.";
-    document.querySelector("#music-audio-name").textContent = customMusicUrl ? "Trilha carregada; disponível enquanto esta aba estiver aberta." : "Opcional: use uma música do seu aparelho.";
+    document.querySelector("#music-audio-name").textContent = customMusicUrl ? "Faixa do aparelho ativa nesta sessão." : "As duas faixas RACHA estão disponíveis acima.";
 }
 
 function preloadBundledAudio() {
@@ -149,7 +213,7 @@ function playLocalAudio(path, volume, { delay = 0, maxDuration = 0 } = {}) {
         return null;
     }
     const audio = new Audio(source);
-    audio.volume = Math.min(1, volume);
+    audio.volume = Math.min(0.25, volume * 0.25);
     audio.preload = "auto";
     const play = () => {
         audio.play().catch(() => {});
@@ -187,23 +251,9 @@ function stopBackgroundMusic() {
 
 function startBackgroundMusic() {
     if (!audioSettings.musicEnabled || audioSettings.musicVolume === 0) return;
-    const stadiumUrl = bundledAudioUrls.get("assets/audio/maracana-crowd.mp3");
-    if (!customMusicAudio && stadiumUrl === undefined) {
-        preloadBundledAudio().then(() => {
-            if (audioSettings.musicEnabled) startBackgroundMusic();
-        });
-        return;
-    }
-    if (!customMusicAudio && !stadiumUrl) {
-        audioSettings.musicEnabled = false;
-        updateAudioControls();
-        saveAudioSettings();
-        showToast("Não foi possível carregar a gravação do estádio.");
-        return;
-    }
-    const audio = customMusicAudio || (stadiumAudio ||= new Audio(stadiumUrl));
+    const audio = customMusicAudio || (stadiumAudio ||= new Audio(audioSettings.musicTrack));
     audio.loop = true;
-    audio.volume = audioSettings.musicVolume / 100;
+    audio.volume = audioSettings.musicVolume / 100 * 0.22;
     audio.preload = "auto";
     audio.play().catch(() => showToast("Toque para iniciar o áudio neste navegador."));
 }
@@ -252,10 +302,21 @@ function initializeSettings() {
         document.querySelector("#music-volume-value").textContent = `${audioSettings.musicVolume}%`;
         saveAudioSettings();
         for (const audio of [customMusicAudio, stadiumAudio]) {
-            if (audio) audio.volume = audioSettings.musicVolume / 100;
+            if (audio) audio.volume = audioSettings.musicVolume / 100 * 0.22;
         }
         if (audioSettings.musicEnabled && audioSettings.musicVolume > 0) startBackgroundMusic();
         else if (audioSettings.musicVolume === 0) stopBackgroundMusic();
+    });
+    document.querySelector("#music-track").addEventListener("change", event => {
+        audioSettings.musicTrack = musicTracks.includes(event.target.value) ? event.target.value : musicTracks[0];
+        stopBackgroundMusic();
+        if (customMusicUrl) URL.revokeObjectURL(customMusicUrl);
+        customMusicUrl = null;
+        customMusicAudio = null;
+        document.querySelector("#music-audio-file").value = "";
+        updateAudioControls();
+        syncBackgroundMusic();
+        saveAudioSettings();
     });
     document.querySelector("#crowd-audio-file").addEventListener("change", event => {
         const [file] = event.target.files;
@@ -272,6 +333,7 @@ function initializeSettings() {
     document.querySelector("#music-audio-file").addEventListener("change", event => {
         const [file] = event.target.files;
         if (!file) return;
+        stopBackgroundMusic();
         if (customMusicUrl) URL.revokeObjectURL(customMusicUrl);
         customMusicUrl = URL.createObjectURL(file);
         customMusicAudio = new Audio(customMusicUrl);
@@ -292,7 +354,7 @@ function initializeSettings() {
         customMusicAudio = null;
         document.querySelector("#crowd-audio-file").value = "";
         document.querySelector("#music-audio-file").value = "";
-        Object.assign(audioSettings, { effectsEnabled: true, effectsVolume: 45, musicEnabled: false, musicVolume: 18, theme: "gramado", mode: "dark" });
+        Object.assign(audioSettings, { effectsEnabled: true, effectsVolume: 35, musicEnabled: false, musicVolume: 32, musicTrack: musicTracks[0], theme: "gramado", mode: "dark" });
         applyTheme(audioSettings.theme);
         updateAudioControls();
         syncBackgroundMusic();
@@ -369,7 +431,7 @@ function loadMatches() {
 }
 
 function loadGameSetup() {
-    const defaults = { date: localDateKey(), time: "21:00", venue: "", fee: 0, mode: "resenha", captainId: "", adminIds: [] };
+    const defaults = { date: localDateKey(), time: "21:00", venue: "", fee: 0, mode: "resenha" };
     try {
         const saved = JSON.parse(localStorage.getItem(GAME_SETUP_KEY) || "{}");
         return {
@@ -377,9 +439,7 @@ function loadGameSetup() {
             time: /^\d{2}:\d{2}$/.test(saved.time || "") ? saved.time : defaults.time,
             venue: typeof saved.venue === "string" ? saved.venue.slice(0, 60) : defaults.venue,
             fee: Number.isFinite(Number(saved.fee)) ? Math.max(0, Number(saved.fee)) : defaults.fee,
-            mode: saved.mode === "professional" ? "professional" : defaults.mode,
-            captainId: typeof saved.captainId === "string" ? saved.captainId : defaults.captainId,
-            adminIds: Array.isArray(saved.adminIds) ? [...new Set(saved.adminIds.filter(id => typeof id === "string"))] : defaults.adminIds
+            mode: defaults.mode
         };
     } catch {
         return defaults;
@@ -399,6 +459,30 @@ function saveGameSetup() {
         localStorage.setItem(GAME_SETUP_KEY, JSON.stringify(gameSetup));
     } catch {
         showToast("Não foi possível salvar a configuração do jogo.");
+    }
+}
+
+function loadProfessionalTeams() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(PROFESSIONAL_TEAMS_KEY) || "[]");
+        if (!Array.isArray(saved)) return [];
+        return saved.filter(team => team && typeof team.id === "string" && typeof team.name === "string" && typeof team.captainId === "string" && Array.isArray(team.playerIds))
+            .map(team => ({
+                id: team.id,
+                name: team.name.trim().slice(0, 32),
+                captainId: team.captainId,
+                playerIds: [...new Set(team.playerIds.filter(id => typeof id === "string"))]
+            })).filter(team => team.name && team.playerIds.includes(team.captainId));
+    } catch {
+        return [];
+    }
+}
+
+function saveProfessionalTeams() {
+    try {
+        localStorage.setItem(PROFESSIONAL_TEAMS_KEY, JSON.stringify(professionalTeams));
+    } catch {
+        showToast("Não foi possível salvar as equipes neste navegador.");
     }
 }
 
@@ -471,6 +555,9 @@ const premiumNodeId = "premium-card";
 const growthNodeIds = new Set([...growthBranches.flatMap(branch => branch.nodes.map(node => node.id)), premiumNodeId]);
 const premiumPrerequisites = growthBranches.map(branch => branch.nodes.at(-1).id);
 const players = loadPlayers();
+const professionalTeams = loadProfessionalTeams();
+let goalkeeperIds = new Set();
+let preselectedGoalkeeperIds = new Set();
 
 function getSelectedProfileNames() {
     const names = [...activePresets].filter(name => Object.hasOwn(quickProfiles, name));
@@ -570,10 +657,15 @@ function teamOverall(team) {
     return team.length ? Math.round(team.reduce((total, player) => total + calculateOverall(player), 0) / team.length) : 0;
 }
 
-function buildBalancedTeams(pool) {
-    const playersList = [...pool].sort((first, second) => calculateOverall(second) - calculateOverall(first));
-    const teams = [[], []];
-    const totals = [0, 0];
+function assignDefaultTeamCaptains() {
+    teamCaptainIds = teams.map(team => team[0]?.id || null);
+}
+
+function buildBalancedTeams(pool, selectedGoalkeeperIds = new Set()) {
+    const selectedGoalkeepers = [...pool].filter(player => selectedGoalkeeperIds.has(player.id)).slice(0, 2);
+    const playersList = [...pool].filter(player => !selectedGoalkeepers.includes(player)).sort((first, second) => calculateOverall(second) - calculateOverall(first));
+    const teams = [[selectedGoalkeepers[0]].filter(Boolean), [selectedGoalkeepers[1]].filter(Boolean)];
+    const totals = teams.map(team => team.reduce((total, player) => total + calculateOverall(player), 0));
 
     playersList.forEach(player => {
         const playerOverall = calculateOverall(player);
@@ -594,14 +686,14 @@ function buildBalancedTeams(pool) {
     });
 
     while (teams[0].length - teams[1].length > 1) {
-        const player = teams[0].pop();
-        if (!player) break;
-        teams[1].push(player);
+        const playerIndex = teams[0].findLastIndex(player => !selectedGoalkeepers.includes(player));
+        if (playerIndex < 0) break;
+        teams[1].push(teams[0].splice(playerIndex, 1)[0]);
     }
     while (teams[1].length - teams[0].length > 1) {
-        const player = teams[1].pop();
-        if (!player) break;
-        teams[0].push(player);
+        const playerIndex = teams[1].findLastIndex(player => !selectedGoalkeepers.includes(player));
+        if (playerIndex < 0) break;
+        teams[0].push(teams[1].splice(playerIndex, 1)[0]);
     }
 
     return teams;
@@ -885,8 +977,7 @@ function saveMatchResult() {
         venue: setup.venue,
         fee: setup.fee,
         mode: setup.mode || matchMode,
-        captainId: setup.captainId || "",
-        adminIds: setup.adminIds || [],
+        teamCaptains: [...teamCaptainIds],
         teams: teams.map(team => team.map(player => player.id)),
         participants,
         stats,
@@ -901,6 +992,7 @@ function saveMatchResult() {
     activeMatchId = match.id;
     drawButton.disabled = true;
     document.querySelector("#clear-teams").disabled = true;
+    teamsArea.querySelectorAll("[data-team-captain]").forEach(select => { select.disabled = true; });
     saveMatches();
     savePlayers();
     renderRoster();
@@ -920,13 +1012,38 @@ function showAppView(viewName) {
         if (button.dataset.viewTarget === viewName) button.setAttribute("aria-current", "page");
         else button.removeAttribute("aria-current");
     });
+    if (viewName === "professional") {
+        matchMode = "professional";
+        showProfessionalTab(activeProfessionalTab);
+    }
+    else if (viewName === "match") {
+        matchMode = "resenha";
+        syncPlayerCreationControls();
+        renderRoster();
+        renderTeams();
+    }
     if (viewName === "match" && !activeMatchSetup) activeMatchSetup = { ...gameSetup };
     if (viewName === "home") renderHome();
-    if (viewName === "evolution") renderEvolution();
     if (viewName === "history") renderHistory();
-    if (viewName === "ranking") renderRankings();
     if (viewName === "payments") renderPayments();
     window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function showProfessionalTab(tabName) {
+    const tab = ["teams", "evolution", "ranking"].includes(tabName) ? tabName : "teams";
+    activeProfessionalTab = tab;
+    document.querySelectorAll(".professional-tabs [data-professional-tab-target]").forEach(button => {
+        const selected = button.dataset.professionalTabTarget === tab;
+        button.setAttribute("aria-selected", String(selected));
+        button.tabIndex = selected ? 0 : -1;
+    });
+    document.querySelectorAll(".professional-tab-panel").forEach(panel => {
+        panel.hidden = panel.id !== `professional-${tab}-panel`;
+    });
+    matchMode = "professional";
+    if (tab === "teams") renderProfessionalTeams();
+    if (tab === "evolution") renderEvolution();
+    if (tab === "ranking") renderRankings();
 }
 
 function readGameSetup() {
@@ -935,47 +1052,115 @@ function readGameSetup() {
         time: document.querySelector("#game-time").value,
         venue: document.querySelector("#game-venue").value.trim(),
         fee: Math.max(0, Number(document.querySelector("#game-fee").value) || 0),
-        mode: matchMode,
-        captainId: gameSetup.captainId || "",
-        adminIds: gameSetup.adminIds || []
+        mode: "resenha"
     };
     saveGameSetup();
 }
 
-function renderGameRoleControls() {
-    const captainSelect = document.querySelector("#active-player-profile");
+function renderProfessionalTeams() {
+    const captainSelect = document.querySelector("#professional-team-captain");
+    const teamList = document.querySelector("#professional-team-list");
+    if (!captainSelect || !teamList) return;
+    const assignedPlayerIds = new Set(professionalTeams.flatMap(team => team.playerIds));
+    const availableCaptains = players.filter(player => !assignedPlayerIds.has(player.id));
+    captainSelect.innerHTML = `<option value="">Selecione um jogador</option>${availableCaptains.map(player => `<option value="${escapeHtml(player.id)}">${escapeHtml(player.name)}</option>`).join("")}`;
+    document.querySelector("#professional-team-form button[type='submit']").disabled = availableCaptains.length === 0;
+
+    if (!professionalTeams.length) {
+        teamList.innerHTML = '<div class="data-empty"><span aria-hidden="true">♜</span><p>Crie a primeira equipe e escolha seu capitão.</p></div>';
+        return;
+    }
+    teamList.innerHTML = professionalTeams.map(team => {
+        const roster = team.playerIds.map(id => players.find(player => player.id === id)).filter(Boolean);
+        const captains = roster.map(player => `<option value="${escapeHtml(player.id)}" ${player.id === team.captainId ? "selected" : ""}>${escapeHtml(player.name)}</option>`).join("");
+        const assignedElsewhere = new Set(professionalTeams.filter(other => other.id !== team.id).flatMap(other => other.playerIds));
+        const availablePlayers = players.filter(player => !assignedElsewhere.has(player.id) && !team.playerIds.includes(player.id));
+        return `<article class="professional-team" data-professional-team="${escapeHtml(team.id)}">
+            <header class="professional-team-head"><div><p class="eyebrow">Equipe de demonstração</p><h2>${escapeHtml(team.name)}</h2></div><button class="secondary-action" type="button" data-team-delete="${escapeHtml(team.id)}" aria-label="Excluir equipe ${escapeHtml(team.name)}">Excluir equipe</button></header>
+            <div class="professional-team-meta"><label>Capitão<select data-team-captain="${escapeHtml(team.id)}" ${roster.length < 2 ? "disabled" : ""}>${captains}</select></label><strong>${roster.length} ${roster.length === 1 ? "jogador" : "jogadores"}</strong></div>
+            <form class="professional-add-player" data-team-add-form="${escapeHtml(team.id)}"><label>Adicionar jogador<select name="playerId" required ${availablePlayers.length ? "" : "disabled"}><option value="">${availablePlayers.length ? "Selecione um jogador disponível" : "Todos os jogadores já estão em equipes"}</option>${availablePlayers.map(player => `<option value="${escapeHtml(player.id)}">${escapeHtml(player.name)}</option>`).join("")}</select></label><button class="primary" type="submit" ${availablePlayers.length ? "" : "disabled"}>Adicionar</button></form>
+            <ul class="professional-roster">${roster.map(player => `<li><span><strong>${escapeHtml(player.name)}</strong>${player.id === team.captainId ? '<small>CAPITÃO</small>' : ""}</span><button class="icon-btn remove" type="button" data-team-remove-player="${escapeHtml(team.id)}" data-player-id="${escapeHtml(player.id)}" aria-label="Remover ${escapeHtml(player.name)} da equipe">×</button></li>`).join("") || '<li class="professional-roster-empty">Sem jogadores vinculados.</li>'}</ul>
+        </article>`;
+    }).join("");
+}
+
+function removePlayerFromProfessionalTeams(playerId) {
+    professionalTeams.forEach(team => {
+        team.playerIds = team.playerIds.filter(id => id !== playerId);
+        if (team.captainId === playerId) team.captainId = team.playerIds[0] || "";
+    });
+    for (let index = professionalTeams.length - 1; index >= 0; index -= 1) {
+        if (!professionalTeams[index].playerIds.length) professionalTeams.splice(index, 1);
+    }
+    saveProfessionalTeams();
+    renderProfessionalTeams();
+}
+
+function createProfessionalTeam(event) {
+    event.preventDefault();
+    const nameInput = document.querySelector("#professional-team-name");
+    const captainSelect = document.querySelector("#professional-team-captain");
+    const name = nameInput.value.trim().replace(/\s+/g, " ").slice(0, 32);
+    const captainId = captainSelect.value;
+    if (!name || !players.some(player => player.id === captainId)) return showToast("Escolha um capitão disponível para criar a equipe.");
+    if (professionalTeams.some(team => team.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) return showToast("Já existe uma equipe com esse nome.");
+    if (professionalTeams.some(team => team.playerIds.includes(captainId))) return showToast("Este jogador já participa de outra equipe.");
+    professionalTeams.push({ id: createId(), name, captainId, playerIds: [captainId] });
+    saveProfessionalTeams();
+    nameInput.value = "";
+    renderProfessionalTeams();
+    showToast(`${name} criada. ${players.find(player => player.id === captainId).name} é o capitão.`);
+}
+
+function handleProfessionalTeamAction(event) {
+    const deleteButton = event.target.closest("[data-team-delete]");
+    if (deleteButton) {
+        const index = professionalTeams.findIndex(team => team.id === deleteButton.dataset.teamDelete);
+        if (index < 0) return;
+        professionalTeams.splice(index, 1);
+        saveProfessionalTeams();
+        renderProfessionalTeams();
+        return;
+    }
+    const removeButton = event.target.closest("[data-team-remove-player]");
+    if (removeButton) {
+        const team = professionalTeams.find(item => item.id === removeButton.dataset.teamRemovePlayer);
+        if (!team || team.playerIds.length <= 1) return showToast("A equipe precisa manter ao menos um jogador. Exclua a equipe para removê-la por completo.");
+        const playerId = removeButton.dataset.playerId;
+        team.playerIds = team.playerIds.filter(id => id !== playerId);
+        if (team.captainId === playerId) team.captainId = team.playerIds[0];
+        saveProfessionalTeams();
+        renderProfessionalTeams();
+    }
+}
+
+function handleProfessionalTeamChange(event) {
+    const captainSelect = event.target.closest("[data-team-captain]");
     if (!captainSelect) return;
-    const setup = activeMatchSetup || gameSetup;
-    captainSelect.innerHTML = `<option value="">Selecione seu perfil de jogador</option>${players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join("")}`;
-    captainSelect.value = players.some(player => player.id === setup.captainId) ? setup.captainId : "";
-    const adminPlayers = players.filter(player => player.id !== captainSelect.value);
-    document.querySelector("#match-admin-options").innerHTML = adminPlayers.length
-        ? adminPlayers.map(player => `<label class="admin-option"><input type="checkbox" name="match-admin" value="${player.id}" ${(setup.adminIds || []).includes(player.id) ? "checked" : ""}><span>${escapeHtml(player.name)}</span></label>`).join("")
-        : '<span class="admin-empty">Cadastre jogadores para escolher admins.</span>';
-    document.querySelector("#match-admin-controls").hidden = !teams;
+    const team = professionalTeams.find(item => item.id === captainSelect.dataset.teamCaptain);
+    if (!team || !team.playerIds.includes(captainSelect.value)) return;
+    team.captainId = captainSelect.value;
+    saveProfessionalTeams();
+    renderProfessionalTeams();
 }
 
-function readMatchRoles() {
-    const captainId = document.querySelector("#active-player-profile").value;
-    const adminIds = [...document.querySelectorAll('input[name="match-admin"]:checked')].map(input => input.value).filter(id => id !== captainId);
-    Object.assign(gameSetup, { captainId, adminIds });
-    if (activeMatchSetup) Object.assign(activeMatchSetup, { captainId, adminIds });
-    saveGameSetup();
-}
-
-function handleMatchRoleChange(event) {
-    readMatchRoles();
-    if (event.target.id === "active-player-profile") renderGameRoleControls();
-    if (event.target.name === "match-admin") renderTeams();
+function addProfessionalTeamPlayer(event) {
+    const form = event.target.closest("[data-team-add-form]");
+    if (!form) return;
+    event.preventDefault();
+    const team = professionalTeams.find(item => item.id === form.dataset.teamAddForm);
+    const playerId = new FormData(form).get("playerId");
+    if (!team || !players.some(player => player.id === playerId)) return;
+    if (professionalTeams.some(other => other.playerIds.includes(playerId))) return showToast("Este jogador já participa de uma equipe.");
+    team.playerIds.push(playerId);
+    saveProfessionalTeams();
+    renderProfessionalTeams();
 }
 
 function renderMatchDetails() {
     const setup = activeMatchSetup || gameSetup;
-    const captain = players.find(player => player.id === setup.captainId);
-    const admins = (setup.adminIds || []).map(id => players.find(player => player.id === id)).filter(Boolean);
-    return `<section class="match-details" aria-label="Dados e organização do jogo">
+    return `<section class="match-details" aria-label="Dados da partida">
         <div><span>DATA E HORÁRIO</span><strong>${formatMatchDate(setup.date)} · ${escapeHtml(setup.time || "Horário a definir")}</strong><small>${escapeHtml(setup.venue || "Local a definir")}</small></div>
-        <div><span>CAPITÃO</span><strong>${captain ? escapeHtml(captain.name) : "A definir"}</strong><small>${admins.length ? `Admins: ${admins.map(player => escapeHtml(player.name)).join(", ")}` : "Admins de apoio não definidos"}</small></div>
     </section>`;
 }
 
@@ -984,6 +1169,8 @@ function startNewMatch() {
     activeMatchSetup = { ...gameSetup };
     activeMatchId = null;
     teams = null;
+    teamCaptainIds = [null, null];
+    goalkeeperIds.clear();
     selectedPlayerId = null;
     comparisonPlayerIds = null;
     selectionMode = "swap";
@@ -1000,22 +1187,38 @@ function initializeDashboard() {
     document.querySelector("#game-time").value = gameSetup.time;
     document.querySelector("#game-venue").value = gameSetup.venue;
     document.querySelector("#game-fee").value = gameSetup.fee || "";
-    renderGameRoleControls();
     document.querySelectorAll(".match-mode-button").forEach(button => {
-        button.setAttribute("aria-pressed", String(button.dataset.matchMode === matchMode));
-        button.addEventListener("click", () => updateMatchMode(button.dataset.matchMode));
+        button.setAttribute("aria-pressed", String(button.dataset.matchMode === "resenha"));
     });
-    document.querySelector("#match-mode-description").textContent = matchMode === "professional"
-        ? "Notas mais altas e perfis contam no equilíbrio dos times."
-        : "Notas iguais para um jogo leve entre amigos.";
+    document.querySelector("#match-mode-description").textContent = "Monte as equipes e organize a partida entre amigos.";
     syncPlayerCreationControls();
+    document.querySelector(".professional-tabs").addEventListener("keydown", event => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        const tabs = [...document.querySelectorAll(".professional-tabs [data-professional-tab-target]")];
+        const currentIndex = tabs.indexOf(event.target.closest("[data-professional-tab-target]"));
+        if (currentIndex < 0) return;
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const nextTab = tabs[(currentIndex + direction + tabs.length) % tabs.length];
+        showProfessionalTab(nextTab.dataset.professionalTabTarget);
+        nextTab.focus();
+    });
     document.addEventListener("click", event => {
+        const professionalTabButton = event.target.closest("[data-professional-tab-target]");
+        if (professionalTabButton) {
+            if (!document.querySelector("#professional-view").classList.contains("is-active")) showAppView("professional");
+            showProfessionalTab(professionalTabButton.dataset.professionalTabTarget);
+            return;
+        }
         const viewButton = event.target.closest("[data-view-target]");
         if (viewButton) showAppView(viewButton.dataset.viewTarget);
     });
     document.querySelector("#setup-form").addEventListener("input", readGameSetup);
     document.querySelector("#setup-form").addEventListener("change", readGameSetup);
-    document.querySelector("#match-management").addEventListener("change", handleMatchRoleChange);
+    document.querySelector("#professional-team-form").addEventListener("submit", createProfessionalTeam);
+    document.querySelector("#professional-team-list").addEventListener("click", handleProfessionalTeamAction);
+    document.querySelector("#professional-team-list").addEventListener("change", handleProfessionalTeamChange);
+    document.querySelector("#professional-team-list").addEventListener("submit", addProfessionalTeamPlayer);
     document.querySelector("#setup-form").addEventListener("submit", event => {
         event.preventDefault();
         startNewMatch();
@@ -1024,7 +1227,12 @@ function initializeDashboard() {
         if (!players.length) return showToast("A lista de jogadores já está vazia.");
         if (!window.confirm("Apagar todos os jogadores cadastrados? O histórico de partidas e pagamentos será mantido.")) return;
         players.length = 0;
+        preselectedGoalkeeperIds.clear();
+        professionalTeams.length = 0;
+        saveProfessionalTeams();
         teams = null;
+        teamCaptainIds = [null, null];
+        goalkeeperIds.clear();
         activeMatchId = null;
         activeMatchSetup = { ...gameSetup };
         selectedPlayerId = null;
@@ -1033,16 +1241,19 @@ function initializeDashboard() {
         renderRoster();
         renderTeams();
         renderHome();
+        renderProfessionalTeams();
         showToast("Jogadores removidos. O histórico foi mantido.");
     });
     document.querySelector("#clear-teams").addEventListener("click", () => {
         if (!teams || activeMatchId) return;
         teams = null;
+        teamCaptainIds = [null, null];
+        goalkeeperIds.clear();
         selectedPlayerId = null;
         comparisonPlayerIds = null;
         selectionMode = "swap";
-        renderGameRoleControls();
         renderTeams();
+        renderRoster();
         showToast("Escalação limpa. Os jogadores continuam na lista.");
     });
     document.querySelector("#pay-all").addEventListener("click", () => setAllPayments(true));
@@ -1071,33 +1282,6 @@ function initializeDashboard() {
     });
 }
 
-function updateMatchMode(mode) {
-    if (activeMatchId) {
-        showToast("Este jogo já foi salvo. Comece um novo jogo para trocar o modo.");
-        return;
-    }
-    matchMode = mode === "professional" ? "professional" : "resenha";
-    gameSetup.mode = matchMode;
-    if (activeMatchSetup) activeMatchSetup.mode = matchMode;
-    if (matchMode === "resenha") {
-        activePresets = new Set(["geral"]);
-        document.querySelectorAll(".preset-pill").forEach(button => button.classList.toggle("is-active", button.dataset.preset === "geral"));
-        document.querySelector("#preset-label").textContent = "Geral";
-        document.querySelector("#player-height").value = "";
-        document.querySelector("#player-weight").value = "";
-    }
-    document.querySelectorAll(".match-mode-button").forEach(button => {
-        button.setAttribute("aria-pressed", String(button.dataset.matchMode === matchMode));
-    });
-    document.querySelector("#match-mode-description").textContent = matchMode === "professional"
-        ? "Notas mais altas e perfis contam no equilíbrio dos times."
-        : "Notas iguais para um jogo leve entre amigos.";
-    syncPlayerCreationControls();
-    saveGameSetup();
-    renderRoster();
-    invalidateTeams();
-}
-
 function syncPlayerCreationControls() {
     const isResenha = matchMode === "resenha";
     document.querySelector(".player-mode-toggle").hidden = isResenha;
@@ -1122,6 +1306,8 @@ function setAllPayments(paid) {
 
 function invalidateTeams() {
     teams = null;
+    teamCaptainIds = [null, null];
+    goalkeeperIds.clear();
     selectedPlayerId = null;
     comparisonPlayerIds = null;
     selectionMode = "swap";
@@ -1129,9 +1315,12 @@ function invalidateTeams() {
 }
 
 function renderRoster() {
-    renderGameRoleControls();
+    renderProfessionalTeams();
     document.querySelector("#roster-count").textContent = players.length;
     document.querySelector("#summary-count").textContent = `${players.length} ${players.length === 1 ? "jogador" : "jogadores"}`;
+    document.querySelector("#goalkeeper-selection-note").textContent = teams
+        ? `Goleiros desta escalação: ${goalkeeperIds.size}/2 definidos. Limpe os times para alterar antes de outro sorteio.`
+        : `Goleiros para este sorteio: ${preselectedGoalkeeperIds.size}/2 selecionados.`;
     drawButton.disabled = players.length < 2;
     if (players.length === 0) {
         rosterElement.innerHTML = '<div class="empty-roster">Sua lista começa com o primeiro nome.<br>Cadastre pelo menos 2 jogadores para sortear.</div>';
@@ -1145,13 +1334,14 @@ function renderRoster() {
             <article class="player-card tier-${tier}" data-id="${player.id}">
                 <div class="player-top"><span class="player-name" title="${escapeHtml(player.name)}">${escapeHtml(player.name)}</span><span class="player-actions">${renderStarRating(stars)}${renderOverall(player)}<button class="icon-btn edit" type="button" aria-label="Editar nome de ${escapeHtml(player.name)}" title="Editar nome">✎</button><button class="icon-btn remove" type="button" aria-label="Remover ${escapeHtml(player.name)}" title="Remover jogador">×</button></span></div>
                 <div class="quick-profile-pill">${escapeHtml(quickLabel)}${matchMode === "professional" ? ` · Pé fraco ${player.weakFoot}/5` : ""}</div>
+                <button class="goalkeeper-roster-toggle ${preselectedGoalkeeperIds.has(player.id) ? "is-selected" : ""}" type="button" data-goalkeeper-preselect="${escapeHtml(player.id)}" aria-pressed="${preselectedGoalkeeperIds.has(player.id)}" ${teams ? "disabled" : ""}>${preselectedGoalkeeperIds.has(player.id) ? "✓ Goleiro selecionado" : "＋ Definir como goleiro"}</button>
       </article>`;
     }).join("");
 }
 
 function renderEvolution() {
     if (matchMode !== "professional") {
-        evolutionRosterElement.innerHTML = '<div class="evolution-empty"><h2>Evolução profissional</h2><p>Ative o Racha Profissional na montagem para editar atributos e evoluir os jogadores.</p><button class="primary" type="button" data-view-target="match">Ir para montagem</button></div>';
+        evolutionRosterElement.innerHTML = '<div class="evolution-empty"><h2>Evolução profissional</h2><p>Acesse o Racha Profissional para editar atributos e acompanhar as trilhas de evolução.</p><button class="primary" type="button" data-view-target="professional">Abrir Racha Profissional</button></div>';
         return;
     }
     if (!players.length) {
@@ -1172,9 +1362,8 @@ function renderPitchBall(gradientId = "pitch-ball-shell") {
 
 function renderTeams() {
     document.querySelector("#clear-teams").disabled = !teams || Boolean(activeMatchId);
-    document.querySelector("#match-admin-controls").hidden = !teams;
     if (!teams) {
-        teamsArea.innerHTML = `${renderMatchDetails()}<div class="team-empty"><span class="pitch-icon" aria-hidden="true">${renderPitchBall()}</span><p>Adicione os jogadores e sorteie os times para ver as escalações.</p></div>`;
+        teamsArea.innerHTML = `${renderMatchDetails()}<div class="team-empty"><span class="pitch-icon" aria-hidden="true"><img class="pitch-logo" src="racha-escudo.svg" alt=""></span><p>Adicione os jogadores e sorteie os times para ver as escalações.</p></div>`;
         document.querySelector("#team-description").textContent = players.length > 0 ? "Sorteie novamente para montar as equipes." : "Seu próximo sorteio aparece aqui.";
         renderMatchRecording();
         return;
@@ -1204,11 +1393,11 @@ function renderTeams() {
         </div>${compareContent}<div class="teams">${teams.map((team, teamIndex) => {
         return `
       <section class="team team-${teamIndex === 0 ? "a" : "b"}" aria-label="Time ${teamIndex === 0 ? "A" : "B"}">
-        <div class="team-title"><h3><span class="team-dot"></span>Time ${teamIndex === 0 ? "A" : "B"}</h3><span class="team-meta"><span>${team.length} ${team.length === 1 ? "jogador" : "jogadores"}</span><strong>${teamRatings[teamIndex]} GER</strong></span></div>
+        <div class="team-title"><h3><span class="team-dot"></span>Time ${teamIndex === 0 ? "A" : "B"}</h3><div class="team-meta"><span>${team.length} ${team.length === 1 ? "jogador" : "jogadores"}</span><strong>${teamRatings[teamIndex]} GER</strong><label class="team-captain-control"><span>Capitão</span><select data-team-captain="${teamIndex}" aria-label="Capitão do Time ${teamIndex === 0 ? "A" : "B"}" ${activeMatchId ? "disabled" : ""}>${team.map(teamPlayer => `<option value="${escapeHtml(teamPlayer.id)}" ${teamPlayer.id === teamCaptainIds[teamIndex] ? "selected" : ""}>${escapeHtml(teamPlayer.name)}</option>`).join("")}</select></label></div></div>
         <div class="team-players">${team.map((player, playerIndex) => {
                         const actionLabel = selectionMode === "compare" ? `Selecionar ${player.name} para comparação` : selectedPlayerId ? `Trocar ${player.name} de time` : `Selecionar ${player.name} para troca`;
-                        const isGoalkeeper = (player.quickProfile || []).includes("goleiro");
-                        const roleLabel = player.id === (activeMatchSetup || gameSetup).captainId ? "CAPITÃO" : ((activeMatchSetup || gameSetup).adminIds || []).includes(player.id) ? "ADMIN" : "";
+                        const isGoalkeeper = goalkeeperIds.has(player.id);
+                        const roleLabel = player.id === teamCaptainIds[teamIndex] ? "CAPITÃO" : "";
                         return `<article class="team-player tier-${ratingTier(calculateOverall(player))} ${isGoalkeeper ? "goalkeeper-card" : ""} ${selectedPlayerId === player.id ? "selected" : ""} ${selectedPlayerId ? "selectable" : ""}" style="--player-index: ${playerIndex}" data-id="${player.id}" data-team="${teamIndex}" role="group" tabindex="0" aria-label="${escapeHtml(actionLabel)}${isGoalkeeper ? ", goleiro" : ""}${roleLabel ? `, ${roleLabel.toLocaleLowerCase("pt-BR")}` : ""}">
                             <div class="player-top"><span class="team-player-identity"><span class="player-name">${escapeHtml(player.name)}</span>${roleLabel ? `<span class="player-role-badge">${roleLabel}</span>` : ""}${isGoalkeeper ? '<span class="goalkeeper-badge">GOLEIRO</span>' : ""}</span><span class="team-player-rating">${renderStarRating(calculateStars(player))}${renderOverall(player)}</span></div>
                 <div class="quick-profile-pill team-specialties">${escapeHtml(getQuickProfileLabel(player.quickProfile || ["geral"]))}${matchMode === "professional" ? ` · Pé fraco ${player.weakFoot}/5` : ""}</div>
@@ -1331,6 +1520,20 @@ document.addEventListener("input", event => {
 });
 
 document.addEventListener("click", event => {
+    const goalkeeperButton = event.target.closest("[data-goalkeeper-preselect]");
+    if (goalkeeperButton) {
+        const playerId = goalkeeperButton.dataset.goalkeeperPreselect;
+        if (preselectedGoalkeeperIds.has(playerId)) {
+            preselectedGoalkeeperIds.delete(playerId);
+        } else if (preselectedGoalkeeperIds.size >= 2) {
+            showToast("Selecione no máximo um goleiro para cada time.");
+            return;
+        } else {
+            preselectedGoalkeeperIds.add(playerId);
+        }
+        renderRoster();
+        return;
+    }
     const card = event.target.closest(".player-card");
     if (!card) return;
     const player = players.find(item => item.id === card.dataset.id);
@@ -1339,8 +1542,10 @@ document.addEventListener("click", event => {
     if (growthButton) {
         unlockGrowthNode(player, growthButton.dataset.growthNode);
     } else if (event.target.closest(".remove")) {
+        preselectedGoalkeeperIds.delete(player.id);
         players.splice(players.indexOf(player), 1);
         savePlayers();
+        removePlayerFromProfessionalTeams(player.id);
         renderRoster();
         invalidateTeams();
         renderEvolution();
@@ -1353,6 +1558,7 @@ document.addEventListener("click", event => {
         player.name = cleanName;
         savePlayers();
         renderRoster();
+        renderProfessionalTeams();
         renderTeams();
         renderEvolution();
     }
@@ -1377,11 +1583,22 @@ async function animateDraw(shuffled, nextTeams) {
     const destinationLabel = document.querySelector("#draw-destination");
     const progressLabel = document.querySelector("#draw-progress");
     const stageTitle = document.querySelector("#draw-stage-title");
-    const interval = Math.max(65, Math.min(220, 2100 / shuffled.length));
+    const teamACount = document.querySelector("#draw-team-a-count");
+    const teamBCount = document.querySelector("#draw-team-b-count");
+    const progressBar = document.querySelector("#draw-progress-bar");
+    const teamRosters = [document.querySelector("#draw-team-a-roster"), document.querySelector("#draw-team-b-roster")];
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const revealDuration = Math.min(6200, Math.max(3600, shuffled.length * 420));
+    const interval = reducedMotion ? 0 : revealDuration / shuffled.length;
     const teamByPlayerId = new Map(nextTeams.flatMap((team, teamIndex) => team.map(player => [player.id, teamIndex])));
+    const assignedCounts = [0, 0];
 
     drawButton.disabled = true;
     stageTitle.textContent = "Sorteando os times";
+    teamACount.textContent = "0";
+    teamBCount.textContent = "0";
+    progressBar.style.width = "0%";
+    teamRosters.forEach(roster => { roster.replaceChildren(); });
     overlay.classList.add("is-active");
     overlay.setAttribute("aria-hidden", "false");
     document.body.classList.add("draw-active");
@@ -1392,20 +1609,35 @@ async function animateDraw(shuffled, nextTeams) {
         destinationLabel.textContent = `TIME ${teamIndex === 0 ? "A" : "B"}`;
         destinationLabel.dataset.team = teamIndex === 0 ? "a" : "b";
         progressLabel.textContent = `${index + 1} / ${shuffled.length} jogadores escalados`;
+        progressBar.style.width = `${(index + 1) / shuffled.length * 100}%`;
+        assignedCounts[teamIndex] += 1;
+        teamACount.textContent = String(assignedCounts[0]);
+        teamBCount.textContent = String(assignedCounts[1]);
+        const rosterEntry = document.createElement("li");
+        rosterEntry.textContent = player.name;
+        teamRosters[teamIndex].append(rosterEntry);
+        playerLabel.animate([
+            { opacity: 0, transform: "translateY(9px)" },
+            { opacity: 1, transform: "translateY(0)" }
+        ], { duration: Math.min(360, interval * 0.65), easing: "cubic-bezier(.2,.8,.2,1)" });
         await wait(interval);
     }
 
-    stageTitle.textContent = "Times prontos!";
+    stageTitle.textContent = "Equipes definidas";
     playerLabel.textContent = "Que comece o jogo.";
+    destinationLabel.textContent = "SORTEIO CONCLUÍDO";
+    destinationLabel.removeAttribute("data-team");
     document.querySelector("#team-description").textContent = "Apita o juiz. Valendo!";
-    await wait(450);
+    await wait(reducedMotion ? 80 : 560);
 
     teams = nextTeams;
+    assignDefaultTeamCaptains();
+    goalkeeperIds = new Set(nextTeams.flat().filter(player => preselectedGoalkeeperIds.has(player.id)).map(player => player.id));
     selectedPlayerId = null;
     comparisonPlayerIds = null;
     selectionMode = "swap";
-    renderGameRoleControls();
     renderTeams();
+    renderRoster();
     overlay.classList.remove("is-active");
     overlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("draw-active");
@@ -1417,19 +1649,21 @@ async function animateDraw(shuffled, nextTeams) {
 drawButton.addEventListener("click", () => {
     if (activeMatchId) return showToast("Este jogo já foi salvo. Comece um novo jogo para sortear novamente.");
     if (players.length < 2) return;
-    if (!gameSetup.captainId || !players.some(player => player.id === gameSetup.captainId)) return showToast("Escolha seu perfil no Racha para ser o capitão deste sorteio.");
-    const nextTeams = buildBalancedTeams(players);
+    const nextTeams = buildBalancedTeams(players, preselectedGoalkeeperIds);
     const shuffled = shuffle(nextTeams.flat());
     animateDraw(shuffled, nextTeams);
 });
 
 function applyBalancedTeams() {
     if (!players.length || activeMatchId) return;
-    teams = buildBalancedTeams(players);
+    teams = buildBalancedTeams(players, preselectedGoalkeeperIds);
+    assignDefaultTeamCaptains();
+    goalkeeperIds = new Set(teams.flat().filter(player => preselectedGoalkeeperIds.has(player.id)).map(player => player.id));
     selectedPlayerId = null;
     comparisonPlayerIds = null;
     selectionMode = "swap";
     renderTeams();
+    renderRoster();
     playEffect("draw");
     showToast("Times equilibrados pela nota geral.");
 }
@@ -1454,6 +1688,7 @@ function handleTeamSelection(event) {
         renderTeams();
         return;
     }
+    if (event.target.closest("select, input, label, button, summary")) return;
     if (event.target.closest(".player-skills-disclosure")) return;
     const card = event.target.closest(".team-player");
     if (!card || !teams) return;
@@ -1489,13 +1724,44 @@ function handleTeamSelection(event) {
     const firstIndex = teams[otherTeamIndex].findIndex(player => player.id === selectedPlayerId);
     const secondIndex = teams[teamIndex].findIndex(player => player.id === playerId);
     [teams[otherTeamIndex][firstIndex], teams[teamIndex][secondIndex]] = [teams[teamIndex][secondIndex], teams[otherTeamIndex][firstIndex]];
+    const previousGoalkeepers = [...goalkeeperIds];
+    goalkeeperIds.clear();
+    teams.forEach(team => {
+        const keeper = team.find(player => previousGoalkeepers.includes(player.id));
+        if (keeper) goalkeeperIds.add(keeper.id);
+    });
+    const previousCaptains = new Set(teamCaptainIds.filter(Boolean));
+    teamCaptainIds = teams.map(team => team.find(player => previousCaptains.has(player.id))?.id || team[0]?.id || null);
+    preselectedGoalkeeperIds = new Set(goalkeeperIds);
     selectedPlayerId = null;
     renderTeams();
+    renderRoster();
     playEffect("swap");
     showToast("Troca feita. Os times continuam com o mesmo número de jogadores.");
 }
 
+function handleTeamCaptainChange(event) {
+    const captainSelect = event.target.closest("[data-team-captain]");
+    if (!captainSelect || !teams || activeMatchId) return;
+    const teamIndex = Number(captainSelect.dataset.teamCaptain);
+    const playerId = captainSelect.value;
+    if (!teams[teamIndex]?.some(player => player.id === playerId)) return;
+    const resultValues = [...recordingArea.querySelectorAll("[data-result-stat]")].map(input => ({
+        playerId: input.dataset.playerId,
+        stat: input.dataset.resultStat,
+        value: input.value
+    }));
+    teamCaptainIds[teamIndex] = playerId;
+    renderTeams();
+    resultValues.forEach(({ playerId: resultPlayerId, stat, value }) => {
+        const input = recordingArea.querySelector(`[data-result-stat="${stat}"][data-player-id="${CSS.escape(resultPlayerId)}"]`);
+        if (input) input.value = value;
+    });
+    updateLiveScore();
+}
+
 teamsArea.addEventListener("click", handleTeamSelection);
+teamsArea.addEventListener("change", handleTeamCaptainChange);
 teamsArea.addEventListener("keydown", event => {
     if (event.key !== "Enter" && event.key !== " ") return;
     if (!event.target.matches(".team-player")) return;
