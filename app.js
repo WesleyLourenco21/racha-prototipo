@@ -662,10 +662,17 @@ function assignDefaultTeamCaptains() {
 }
 
 function buildBalancedTeams(pool, selectedGoalkeeperIds = new Set()) {
-    const selectedGoalkeepers = [...pool].filter(player => selectedGoalkeeperIds.has(player.id)).slice(0, 2);
-    const playersList = [...pool].filter(player => !selectedGoalkeepers.includes(player)).sort((first, second) => calculateOverall(second) - calculateOverall(first));
-    const teams = [[selectedGoalkeepers[0]].filter(Boolean), [selectedGoalkeepers[1]].filter(Boolean)];
+    const shuffledPool = shuffle(pool);
+    const selectedGoalkeepers = shuffledPool.filter(player => selectedGoalkeeperIds.has(player.id));
+    const playersList = shuffledPool.filter(player => !selectedGoalkeepers.includes(player)).sort((first, second) => calculateOverall(second) - calculateOverall(first));
+    const teams = [[], []];
     const totals = teams.map(team => team.reduce((total, player) => total + calculateOverall(player), 0));
+
+    selectedGoalkeepers.forEach(player => {
+        const teamIndex = teams[0].length <= teams[1].length ? 0 : 1;
+        teams[teamIndex].push(player);
+        totals[teamIndex] += calculateOverall(player);
+    });
 
     playersList.forEach(player => {
         const playerOverall = calculateOverall(player);
@@ -680,7 +687,7 @@ function buildBalancedTeams(pool, selectedGoalkeeperIds = new Set()) {
             }
         ];
 
-        const choice = teamChoices.reduce((best, current) => current.score < best.score ? current : best, teamChoices[0]);
+        const choice = shuffle(teamChoices).reduce((best, current) => current.score < best.score ? current : best);
         teams[choice.index].push(player);
         totals[choice.index] += playerOverall;
     });
@@ -1319,8 +1326,8 @@ function renderRoster() {
     document.querySelector("#roster-count").textContent = players.length;
     document.querySelector("#summary-count").textContent = `${players.length} ${players.length === 1 ? "jogador" : "jogadores"}`;
     document.querySelector("#goalkeeper-selection-note").textContent = teams
-        ? `Goleiros desta escalação: ${goalkeeperIds.size}/2 definidos. Limpe os times para alterar antes de outro sorteio.`
-        : `Goleiros para este sorteio: ${preselectedGoalkeeperIds.size}/2 selecionados.`;
+        ? `Goleiros desta escalação: ${goalkeeperIds.size} definidos. Limpe os times para alterar antes de outro sorteio.`
+        : `Goleiros opcionais para este sorteio: ${preselectedGoalkeeperIds.size} selecionados.`;
     drawButton.disabled = players.length < 2;
     if (players.length === 0) {
         rosterElement.innerHTML = '<div class="empty-roster">Sua lista começa com o primeiro nome.<br>Cadastre pelo menos 2 jogadores para sortear.</div>';
@@ -1525,9 +1532,6 @@ document.addEventListener("click", event => {
         const playerId = goalkeeperButton.dataset.goalkeeperPreselect;
         if (preselectedGoalkeeperIds.has(playerId)) {
             preselectedGoalkeeperIds.delete(playerId);
-        } else if (preselectedGoalkeeperIds.size >= 2) {
-            showToast("Selecione no máximo um goleiro para cada time.");
-            return;
         } else {
             preselectedGoalkeeperIds.add(playerId);
         }
@@ -1588,8 +1592,8 @@ async function animateDraw(shuffled, nextTeams) {
     const progressBar = document.querySelector("#draw-progress-bar");
     const teamRosters = [document.querySelector("#draw-team-a-roster"), document.querySelector("#draw-team-b-roster")];
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const revealDuration = Math.min(6200, Math.max(3600, shuffled.length * 420));
-    const interval = reducedMotion ? 0 : revealDuration / shuffled.length;
+    const revealDuration = 5000;
+    const interval = revealDuration / shuffled.length;
     const teamByPlayerId = new Map(nextTeams.flatMap((team, teamIndex) => team.map(player => [player.id, teamIndex])));
     const assignedCounts = [0, 0];
 
@@ -1616,10 +1620,12 @@ async function animateDraw(shuffled, nextTeams) {
         const rosterEntry = document.createElement("li");
         rosterEntry.textContent = player.name;
         teamRosters[teamIndex].append(rosterEntry);
-        playerLabel.animate([
-            { opacity: 0, transform: "translateY(9px)" },
-            { opacity: 1, transform: "translateY(0)" }
-        ], { duration: Math.min(360, interval * 0.65), easing: "cubic-bezier(.2,.8,.2,1)" });
+        if (!reducedMotion) {
+            playerLabel.animate([
+                { opacity: 0, transform: "translateY(9px)" },
+                { opacity: 1, transform: "translateY(0)" }
+            ], { duration: Math.min(360, interval * 0.65), easing: "cubic-bezier(.2,.8,.2,1)" });
+        }
         await wait(interval);
     }
 
@@ -1650,6 +1656,19 @@ drawButton.addEventListener("click", () => {
     if (activeMatchId) return showToast("Este jogo já foi salvo. Comece um novo jogo para sortear novamente.");
     if (players.length < 2) return;
     const nextTeams = buildBalancedTeams(players, preselectedGoalkeeperIds);
+    if (teams && teams.every((team, teamIndex) => team.length === nextTeams[teamIndex].length && team.every(player => nextTeams[teamIndex].some(candidate => candidate.id === player.id)))) {
+        let swap = null;
+        nextTeams[0].forEach((firstPlayer, firstIndex) => {
+            nextTeams[1].forEach((secondPlayer, secondIndex) => {
+                const sameGoalkeeperStatus = preselectedGoalkeeperIds.has(firstPlayer.id) === preselectedGoalkeeperIds.has(secondPlayer.id);
+                const ratingDifference = Math.abs(calculateOverall(firstPlayer) - calculateOverall(secondPlayer));
+                if (!swap || (sameGoalkeeperStatus && !swap.sameGoalkeeperStatus) || (sameGoalkeeperStatus === swap.sameGoalkeeperStatus && ratingDifference < swap.ratingDifference)) {
+                    swap = { firstIndex, secondIndex, sameGoalkeeperStatus, ratingDifference };
+                }
+            });
+        });
+        if (swap) [nextTeams[0][swap.firstIndex], nextTeams[1][swap.secondIndex]] = [nextTeams[1][swap.secondIndex], nextTeams[0][swap.firstIndex]];
+    }
     const shuffled = shuffle(nextTeams.flat());
     animateDraw(shuffled, nextTeams);
 });
