@@ -1,0 +1,30 @@
+:root {
+    color-scheme: dark;
+    --green: #45b963;
+    --green-dark: #0c1711;
+    --green-pale: #1d3525;
+    --lime: #c5f36b;
+    --ink: #f2f6f1;
+    --muted: #9aa79e;
+    --line: #303c34;
+    --paper: #111713;
+    --surface: #1b241e;
+    --surface-raised: #222c25;
+    --coral: #ff625b;
+    --blue: #35a9eb;
+    --shadow: 0 18px 44px rgba(0, 0, 0, .24);
+}
+
+* { box-sizing: border-box; }
+
+body {
+    min-width: 320px;
+    margin: 0;
+    background-color: var(--paper);
+    background-image: repeating-linear-gradient(90deg, transparent 0 79px, rgba(154, 190, 163, .018) 79px 80px);
+    color: var(--ink);
+    font-family: "DM Sans", sans-serif;
+}
+
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
