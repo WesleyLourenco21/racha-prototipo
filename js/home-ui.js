@@ -1,10 +1,8 @@
-import { countMatchesThisMonth, countPendingPayments, getRecentMatches } from "./stats.js";
+import { getRecentMatches } from "./stats.js";
 
 export function createHomeController({
     documentRef,
     getMatches,
-    getPlayers,
-    getToday,
     getRankingEntries,
     escapeHtml,
     formatMatchDate
@@ -35,10 +33,6 @@ export function createHomeController({
 
     function renderHome() {
         const matches = getMatches();
-        const today = getToday();
-        documentRef.querySelector("#home-player-count").textContent = getPlayers().length;
-        documentRef.querySelector("#home-match-count").textContent = countMatchesThisMonth(matches, today);
-        documentRef.querySelector("#home-pending-count").textContent = countPendingPayments(matches);
         const leaders = getRankingEntries("day").filter(entry => entry.goals || entry.assists).slice(0, 3);
         documentRef.querySelector("#home-today-leaders").innerHTML = leaders.length
             ? leaders.map((entry, index) => `<div class="home-leader"><span class="home-leader-rank">${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(entry.name)}</strong><span>${entry.goals} G · ${entry.assists} A</span></div>`).join("")

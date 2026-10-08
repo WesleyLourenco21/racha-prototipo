@@ -18,15 +18,22 @@
     <script type="module" src="js/app.js"></script>
 </head>
 
-<body>
+<body data-world="racha">
     <header class="topbar">
         <a class="brand" href="#" aria-label="Racha, início"><img class="brand-logo" src="racha-escudo.svg" alt=""><span>Racha<small> / futebol entre amigos</small></span></a>
-        <nav class="main-nav" aria-label="Navegação do Racha">
-            <button class="nav-item" type="button" data-view-target="home" aria-current="page"><span aria-hidden="true">⌂</span>Início</button>
-            <button class="nav-item" type="button" data-view-target="match"><span class="nav-ball" data-ball-icon aria-hidden="true"></span>Racha</button>
-            <button class="nav-item" type="button" data-view-target="professional"><span aria-hidden="true">♜</span>Profissional</button>
-            <button class="nav-item" type="button" data-view-target="history"><span aria-hidden="true">◷</span>Histórico</button>
-            <button class="nav-item" type="button" data-view-target="payments"><span aria-hidden="true">R$</span>Pagamentos</button>
+        <nav class="world-switch" aria-label="Área do aplicativo">
+            <button type="button" data-world-target="racha" aria-pressed="true">⚽ RACHA</button>
+            <button type="button" data-world-target="clube" aria-pressed="false">🏆 RACHA PRO</button>
+        </nav>
+        <nav class="main-nav" aria-label="Navegação da área">
+            <button class="nav-item" type="button" data-app-world="racha" data-view-target="home" aria-current="page"><span aria-hidden="true">⌂</span>Início</button>
+            <button class="nav-item" type="button" data-app-world="racha" data-view-target="match"><span class="nav-ball" data-ball-icon aria-hidden="true"></span>Racha</button>
+            <button class="nav-item" type="button" data-app-world="racha" data-view-target="vs"><span aria-hidden="true">⚔️</span>Confrontos</button>
+            <button class="nav-item" type="button" data-app-world="racha" data-view-target="ranking"><span aria-hidden="true">🏅</span>Ranking</button>
+            <button class="nav-item" type="button" data-app-world="racha" data-view-target="history"><span aria-hidden="true">◷</span>Histórico</button>
+            <button class="nav-item" type="button" data-app-world="racha" data-view-target="payments"><span aria-hidden="true">R$</span>Pagamentos</button>
+            <button class="nav-item" type="button" data-app-world="clube" data-view-target="professional"><span aria-hidden="true">♜</span>Equipes</button>
+            <button class="nav-item" type="button" data-app-world="clube" data-professional-tab-target="evolution"><span aria-hidden="true">👤</span>Perfil</button>
         </nav>
         <div class="top-note">Salvo automaticamente neste navegador</div>
         <button class="settings-trigger" id="settings-open" type="button" aria-label="Abrir opções" title="Opções">
@@ -35,36 +42,77 @@
     </header>
     <main>
         <section class="app-view is-active" id="home-view" aria-labelledby="home-heading">
-            <header class="dashboard-head">
-                <div><p class="eyebrow">Futebol entre amigos</p><h1 id="home-heading">RACHA</h1><p class="subtitle">Monte os times em poucos segundos e comece o jogo.</p></div>
-                <div class="dashboard-actions"><button class="text-action destructive-action" id="clear-players" type="button">Limpar lista</button><button class="primary home-start" type="button" data-view-target="match">Novo racha <span aria-hidden="true">→</span></button></div>
+            <header class="home-welcome">
+                <p class="eyebrow">Futebol entre amigos</p>
+                <h1 id="home-heading">O que você quer fazer?</h1>
+                <p class="subtitle">Seu próximo jogo começa por aqui.</p>
             </header>
-            <div class="dashboard-metrics" aria-label="Resumo do racha">
-                <article class="dashboard-metric"><span>Jogadores na lista</span><strong id="home-player-count">0</strong></article>
-                <article class="dashboard-metric"><span>Jogos este mês</span><strong id="home-match-count">0</strong></article>
-                <article class="dashboard-metric"><span>Pagamentos pendentes</span><strong id="home-pending-count">0</strong></article>
+            <div class="home-action-grid" aria-label="Ações principais">
+                <button class="home-action-card home-action-primary" type="button" data-view-target="match">
+                    <span class="home-action-icon" aria-hidden="true">⚽</span>
+                    <span class="home-action-copy"><strong>Criar um racha</strong><small>Monte os times em segundos</small></span>
+                    <span class="home-action-arrow" aria-hidden="true">→</span>
+                </button>
+                <button class="home-action-card" type="button" data-professional-tab-target="teams">
+                    <span class="home-action-icon" aria-hidden="true">🏆</span>
+                    <span class="home-action-copy"><strong>RACHA PRO</strong><small>Gerencie seu clube e elenco</small></span>
+                    <span class="home-action-arrow" aria-hidden="true">→</span>
+                </button>
+                <button class="home-action-card" type="button" data-view-target="vs">
+                    <span class="home-action-icon" aria-hidden="true">⚔️</span>
+                    <span class="home-action-copy"><strong>Criar confronto</strong><small>Desafie outro clube</small></span>
+                    <span class="home-action-arrow" aria-hidden="true">→</span>
+                </button>
             </div>
-            <div class="dashboard-grid">
-                <section class="home-panel setup-panel" aria-labelledby="setup-heading">
-                    <div class="home-panel-head"><div><p class="eyebrow">Preparação</p><h2 id="setup-heading">Novo racha</h2></div><span class="panel-kicker">PRÓXIMO JOGO</span></div>
-                    <form id="setup-form" class="setup-form">
-                        <label>Data<input id="game-date" type="date" required></label>
-                        <label>Horário<input id="game-time" type="time" value="21:00"></label>
-                        <label class="setup-wide">Local<input id="game-venue" type="text" maxlength="60" placeholder="Arena do bairro"></label>
-                        <label>Valor por jogador<input id="game-fee" type="number" min="0" step="0.50" inputmode="decimal" placeholder="0,00"></label>
-                        <button class="primary setup-submit" type="submit">Continuar <span aria-hidden="true">→</span></button>
-                    </form>
-                    <p class="setup-note">Dados do jogo e pagamentos ficam salvos neste navegador.</p>
+            <section class="nearby-runs-section home-panel" aria-labelledby="nearby-runs-heading">
+                <header class="home-panel-head"><div><p class="eyebrow">Jogue com gente nova</p><h2 id="nearby-runs-heading">Rachas perto de você</h2></div><button class="secondary-action" type="button" id="nearby-location-button">📍 Usar localização aproximada</button></header>
+                <p class="local-prototype-note">Protótipo local: as partidas e presenças ficam neste navegador. As coordenadas são opcionais e aproximadas.</p>
+                <p class="nearby-location-status" id="nearby-location-status" aria-live="polite">Ative sua localização para ordenar jogos por distância.</p>
+                <div class="nearby-runs-list" id="nearby-runs-list" aria-live="polite"></div>
+            </section>
+            <section class="home-panel run-invitation-panel" id="run-invitation-panel" aria-labelledby="run-invitation-heading" hidden>
+                <header class="home-panel-head"><div><p class="eyebrow">Convite recebido</p><h2 id="run-invitation-heading">Confirme sua presença</h2></div></header>
+                <div id="run-invitation-details"></div>
+                <form id="run-invitation-form" class="run-invitation-form">
+                    <label>Seu nome<input id="run-invitation-name" name="name" type="text" maxlength="32" autocomplete="name" placeholder="Como podemos chamar você?" required></label>
+                    <fieldset><legend>Sua resposta</legend><label><input type="radio" name="status" value="confirmed" checked> 🟢 Vou jogar</label><label><input type="radio" name="status" value="maybe"> 🟡 Talvez</label><label><input type="radio" name="status" value="declined"> 🔴 Não posso</label></fieldset>
+                    <button class="primary" type="submit">Preparar resposta para o capitão</button>
+                </form>
+                <p class="local-prototype-note">Este protótipo não envia a resposta automaticamente. Depois de confirmar, compartilhe o link de retorno com o capitão para atualizar a lista no aparelho dele.</p>
+                <div id="run-response-share" class="run-response-share" hidden></div>
+            </section>
+            <div class="home-dashboard-grid">
+                <section class="home-panel recent-panel" aria-labelledby="recent-heading">
+                    <div class="home-panel-head"><div><p class="eyebrow">Memória do racha</p><h2 id="recent-heading">Últimos jogos</h2></div><button class="text-action" type="button" data-view-target="history">Ver histórico →</button></div>
+                    <div id="home-recent-games" class="home-recent-games"></div>
                 </section>
                 <section class="home-panel home-rank-panel" aria-labelledby="today-rank-heading">
-                    <div class="home-panel-head"><div><p class="eyebrow">Artilharia</p><h2 id="today-rank-heading">Destaques de hoje</h2></div><button class="text-action" type="button" data-professional-tab-target="ranking">Ver ranking →</button></div>
+                    <div class="home-panel-head"><div><p class="eyebrow">Artilharia</p><h2 id="today-rank-heading">Ranking de hoje</h2></div><button class="text-action" type="button" data-view-target="ranking">Ver ranking →</button></div>
                     <div id="home-today-leaders" class="home-leaders"></div>
                 </section>
             </div>
-            <section class="home-panel recent-panel" aria-labelledby="recent-heading">
-                <div class="home-panel-head"><div><p class="eyebrow">Memória do racha</p><h2 id="recent-heading">Últimos jogos</h2></div><button class="text-action" type="button" data-view-target="history">Ver histórico →</button></div>
-                <div id="home-recent-games" class="home-recent-games"></div>
-            </section>
+            <nav class="home-shortcuts" aria-label="Atalhos">
+                <button type="button" data-view-target="history"><span aria-hidden="true">◷</span>Últimos jogos</button>
+                <button type="button" data-view-target="ranking"><span aria-hidden="true">🏅</span>Ranking</button>
+                <button type="button" data-professional-tab-target="evolution"><span aria-hidden="true">👤</span>Perfil do jogador</button>
+            </nav>
+            <details class="home-setup-details">
+                <summary>Organizar data, horário, local e valor do próximo racha</summary>
+                <form id="setup-form" class="setup-form">
+                    <label>Data<input id="game-date" type="date" required></label>
+                    <label>Horário<input id="game-time" type="time" value="21:00"></label>
+                    <label class="setup-wide">Local da partida<input id="game-venue" type="text" maxlength="200" placeholder="Arena, endereço ou ponto de referência" autocomplete="street-address"></label>
+                    <div class="setup-wide" id="game-location-preview" aria-live="polite"></div>
+                    <button class="secondary-action setup-wide run-geolocation-button" id="run-capture-location" type="button">📍 Salvar coordenada aproximada do local</button>
+                    <p class="setup-wide run-location-status" id="run-location-status" aria-live="polite">Opcional: salve uma posição aproximada perto da quadra para estimar distâncias.</p>
+                    <label>Valor por jogador<input id="game-fee" type="number" min="0" step="0.50" inputmode="decimal" placeholder="0,00"></label>
+                    <label>Vagas totais<input id="run-capacity" type="number" min="2" max="50" step="1" value="16" inputmode="numeric"></label>
+                    <fieldset class="run-invite-roster setup-wide"><legend>Convidar jogadores do elenco salvo</legend><div id="run-player-invite-list"></div></fieldset>
+                    <button class="primary setup-submit" type="submit">Continuar <span aria-hidden="true">→</span></button>
+                    <button class="secondary-action setup-wide" id="publish-open-run" type="button">📣 Publicar racha e convidar jogadores</button>
+                </form>
+                <p class="setup-note">Os dados do jogo ficam salvos neste navegador. Rachas publicados ficam visíveis apenas neste aparelho até compartilhar o convite.</p>
+            </details>
         </section>
 
         <section class="app-view" id="match-view" aria-label="Montar racha">
@@ -82,7 +130,7 @@
         <div class="workspace">
             <section class="panel" aria-labelledby="roster-heading">
                 <div class="panel-head">
-                    <h2 id="roster-heading">Lista de jogadores</h2><span class="count" id="roster-count">0</span>
+                    <h2 id="roster-heading">Lista de jogadores</h2><span class="count" id="roster-count">0</span><button class="text-action destructive-action" id="clear-players" type="button">Limpar lista</button>
                 </div>
                 <div class="player-creation-shell">
                     <div class="player-mode-toggle" role="group" aria-label="Modo de cadastro de jogador">
@@ -140,33 +188,67 @@
         <section id="match-recording" class="match-recording" aria-live="polite"></section>
         </section>
 
+        <section class="app-view data-view" id="vs-view" aria-labelledby="vs-heading">
+            <header class="data-view-head"><div><p class="eyebrow">RACHA PRO · DESAFIO ENTRE CLUBES</p><h1 id="vs-heading">Criar confronto.</h1><p class="subtitle">Escolha os clubes, convoque os jogadores e confirme data e local do jogo.</p></div></header>
+            <section class="vs-setup-card" aria-label="Montar confronto">
+                <div class="vs-no-clubs" id="vs-no-clubs" hidden><h2>Prepare seus clubes para o desafio.</h2><p>Cadastre dois clubes e seus elencos no RACHA PRO para criar um confronto.</p><button class="primary" type="button" data-professional-tab-target="teams">Abrir RACHA PRO</button></div>
+                <form id="vs-form">
+                    <div class="vs-club-selectors">
+                        <label>Mandante<select id="vs-home-club" name="homeClubId" required></select></label>
+                        <div class="vs-divider" aria-hidden="true">VS</div>
+                        <label>Visitante<select id="vs-away-club" name="awayClubId" required></select></label>
+                    </div>
+                    <div class="vs-roster-grid">
+                        <fieldset><legend id="vs-home-roster-heading">Elenco mandante</legend><div id="vs-home-roster" class="vs-roster-list"></div></fieldset>
+                        <fieldset><legend id="vs-away-roster-heading">Elenco visitante</legend><div id="vs-away-roster" class="vs-roster-list"></div></fieldset>
+                    </div>
+                    <div class="vs-schedule-grid">
+                        <label>Data<input id="vs-date" name="date" type="date" required></label>
+                        <label>Horário<input id="vs-time" name="time" type="time" value="10:00" required></label>
+                        <label class="vs-location-field">Local da partida<input id="vs-location" name="location" type="text" maxlength="200" placeholder="Quadra, campo ou endereço" autocomplete="street-address" required></label>
+                        <div class="vs-location-field" id="vs-location-preview" aria-live="polite"></div>
+                    </div>
+                    <button class="primary vs-confirm-button" type="submit">⚔️ Confirmar confronto</button>
+                </form>
+            </section>
+            <section class="vs-upcoming-section" aria-labelledby="vs-upcoming-heading">
+                <header class="home-panel-head"><div><p class="eyebrow">Agenda dos clubes</p><h2 id="vs-upcoming-heading">Próximos confrontos</h2></div></header>
+                <div id="vs-upcoming-list" class="vs-upcoming-list" aria-live="polite"></div>
+            </section>
+        </section>
+
         <section class="app-view data-view professional-view" id="professional-view" aria-labelledby="professional-heading">
-            <header class="data-view-head"><div><p class="eyebrow">Gestão de equipes</p><h1 id="professional-heading">Racha Profissional.</h1><p class="subtitle">Equipes independentes, sob responsabilidade de seus capitães.</p></div></header>
-            <nav class="professional-tabs" role="tablist" aria-label="Seções do Racha Profissional">
+            <header class="data-view-head"><div><p class="eyebrow">Para capitães e equipes</p><h1 id="professional-heading">RACHA PRO.</h1><p class="subtitle">Crie seu clube, organize o elenco e acompanhe os jogadores.</p></div></header>
+            <nav class="professional-tabs" role="tablist" aria-label="Seções do Clube">
                 <button type="button" role="tab" id="professional-teams-tab" aria-controls="professional-teams-panel" aria-selected="true" data-professional-tab-target="teams">Equipes</button>
                 <button type="button" role="tab" id="professional-evolution-tab" aria-controls="professional-evolution-panel" aria-selected="false" data-professional-tab-target="evolution">Evolução</button>
-                <button type="button" role="tab" id="professional-ranking-tab" aria-controls="professional-ranking-panel" aria-selected="false" data-professional-tab-target="ranking">Ranking</button>
             </nav>
             <section class="professional-tab-panel" id="professional-teams-panel" role="tabpanel" aria-labelledby="professional-teams-tab">
-                <section class="professional-setup" aria-label="Criar equipe de teste">
+                <section class="professional-setup" aria-label="Criar clube no RACHA PRO">
                     <form id="professional-team-form" class="professional-team-form">
-                        <label>Nome da equipe<input id="professional-team-name" type="text" maxlength="32" placeholder="Ex.: União da Quadra" required></label>
-                        <label>Capitão<select id="professional-team-captain" required><option value="">Selecione um jogador</option></select></label>
-                        <button class="primary" type="submit">Criar equipe</button>
+                        <label class="club-field-name">Nome do clube<input id="professional-team-name" name="name" type="text" maxlength="32" placeholder="Ex.: União FC" required></label>
+                        <label>Cidade<input name="city" type="text" maxlength="60" placeholder="Ex.: São Paulo"></label>
+                        <label>Local principal<input name="location" type="text" maxlength="100" placeholder="Quadra ou campo"></label>
+                        <label>Instagram<input name="instagram" type="text" maxlength="60" placeholder="@seuclube"></label>
+                        <label>Capitão<select id="professional-team-captain" name="captainId" required><option value="">Selecione um jogador</option></select></label>
+                        <label class="club-file-field">Escudo<input name="crest" type="file" accept="image/*"></label>
+                        <label class="club-file-field">Foto do uniforme<input name="uniformPhoto" type="file" accept="image/*"></label>
+                        <button class="primary club-create-button" type="submit">Criar clube</button>
                     </form>
-                    <p>Perfis de demonstração: cadastre jogadores na seção Racha para adicioná-los às equipes.</p>
+                    <p>Cadastre os jogadores na área RACHA e adicione-os ao elenco do clube. As imagens são otimizadas e salvas neste navegador.</p>
                 </section>
                 <div class="professional-team-list" id="professional-team-list" aria-live="polite"></div>
             </section>
             <section class="professional-tab-panel data-view" id="professional-evolution-panel" role="tabpanel" aria-labelledby="professional-evolution-tab" hidden>
-                <header class="data-view-head"><div><p class="eyebrow">Desenvolvimento dos jogadores</p><h2 id="evolution-heading">Evolução.</h2><p class="subtitle">Aprimore habilidades e acompanhe cada trilha até o Card Premium.</p></div></header>
+                <header class="data-view-head"><div><p class="eyebrow">Desenvolvimento dos jogadores</p><h2 id="evolution-heading">Perfil e evolução.</h2><p class="subtitle">Aprimore habilidades e acompanhe cada trilha até o Card Premium.</p></div></header>
                 <div id="evolution-roster" class="evolution-roster"></div>
             </section>
-            <section class="professional-tab-panel data-view" id="professional-ranking-panel" role="tabpanel" aria-labelledby="professional-ranking-tab" hidden>
-                <header class="data-view-head"><div><p class="eyebrow">Quem está voando</p><h2 id="ranking-heading">Ranking.</h2><p class="subtitle">Gols e assistências registrados nas partidas.</p></div></header>
-                <div class="ranking-period" role="group" aria-label="Período do ranking"><button type="button" data-ranking-period="day" aria-pressed="true">Hoje</button><button type="button" data-ranking-period="month" aria-pressed="false">Este mês</button></div>
-                <div id="ranking-list" class="ranking-list"></div>
-            </section>
+        </section>
+
+        <section class="app-view data-view" id="ranking-view" aria-labelledby="ranking-heading">
+            <header class="data-view-head"><div><p class="eyebrow">Quem está voando</p><h1 id="ranking-heading">Ranking do racha.</h1><p class="subtitle">Artilharia, assistências, presença e vitórias a partir dos jogos registrados.</p></div></header>
+            <div class="ranking-period" role="group" aria-label="Período do ranking"><button type="button" data-ranking-period="day" aria-pressed="true">Hoje</button><button type="button" data-ranking-period="month" aria-pressed="false">Este mês</button><button type="button" data-ranking-period="all" aria-pressed="false">Geral</button></div>
+            <div id="ranking-list" class="ranking-list"></div>
         </section>
 
         <section class="app-view data-view" id="history-view" aria-labelledby="history-heading">

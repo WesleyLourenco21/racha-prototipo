@@ -11,12 +11,14 @@ import { createProfileController } from "./profile.js";
 import { createVsController } from "./vs.js";
 import { createSettingsController } from "./settings.js";
 import { createHomeController } from "./home-ui.js";
+import { handleLocationMapClick, renderLocationPreview } from "./map.js";
+import { createRunsController } from "./runs.js";
 
 const STORAGE_KEY = "racha.players.v1";
 const TEST_SESSION_KEY = "racha.test-session.v1";
 const TEST_SESSION_TAB_KEY = "racha.test-session-tab.v1";
 const TEST_SESSION_ACTIVITY_KEY = "racha.test-session-activity.v1";
-const DEVELOPMENT_TEST_RESET = true;
+const DEVELOPMENT_TEST_RESET = false;
 const TEST_SESSION_TAB_TTL = 90000;
 
 function getActiveDevelopmentTabs() {
@@ -27,6 +29,23 @@ function getActiveDevelopmentTabs() {
     } catch {
         return [];
     }
+}
+
+function resetRunLocationIfVenueChanged() {
+    const status = document.querySelector("#run-location-status");
+    if (!status.dataset.venue || status.dataset.venue === document.querySelector("#game-venue").value.trim()) return;
+    delete status.dataset.latitude;
+    delete status.dataset.longitude;
+    delete status.dataset.venue;
+    status.textContent = "O local foi alterado. Atualize a coordenada aproximada antes de publicar para estimar a distância.";
+}
+
+function renderRunInvitePlayerOptions() {
+    const list = document.querySelector("#run-player-invite-list");
+    if (!list) return;
+    list.innerHTML = players.length
+        ? players.map(player => `<label><input type="checkbox" name="runInvitePlayer" value="${escapeHtml(player.id)}"><span>${escapeHtml(player.name)}</span></label>`).join("")
+        : '<p class="run-invite-roster-empty">Cadastre jogadores na área RACHA ou convide-os pelo link compartilhado.</p>';
 }
 
 function markDevelopmentSessionActive() {
@@ -57,7 +76,7 @@ function resetDevelopmentSession() {
             return;
         }
         if (getActiveDevelopmentTabs().length === 0) {
-            [STORAGE_KEY, "racha.matches.v1", "racha.game-setup.v1", "racha.professional-teams.v1"].forEach(key => Storage.remove(key));
+            [STORAGE_KEY, "racha.matches.v1", "racha.game-setup.v1", "racha.professional-teams.v1", "racha.vs.v1", "racha.open-runs.v1"].forEach(key => Storage.remove(key));
         }
         sessionStorage.setItem(TEST_SESSION_KEY, "initialized");
         markDevelopmentSessionActive();
@@ -141,7 +160,9 @@ function saveGameSetup() {
 }
 
 function saveProfessionalTeams() {
-    if (!saveStoredProfessionalTeams(professionalTeams)) showToast("Não foi possível salvar as equipes neste navegador.");
+    const saved = saveStoredProfessionalTeams(professionalTeams);
+    if (!saved) showToast("Não foi possível salvar as equipes neste navegador.");
+    return saved;
 }
 
 function createId() {
@@ -227,8 +248,6 @@ const { getRankingEntries, renderRankings } = createRankingController({
 const { renderHome, renderHistory } = createHomeController({
     documentRef: document,
     getMatches: () => matches,
-    getPlayers: () => players,
-    getToday: () => localDateKey(),
     getRankingEntries,
     escapeHtml,
     formatMatchDate
@@ -253,20 +272,54 @@ const {
     addProfessionalTeamPlayer
 } = createProfessionalTeamsController({
     documentRef: document,
+    windowRef: window,
     players,
+    matches,
+    statGroups,
     professionalTeams,
     createId,
     escapeHtml,
+    calculateOverall,
     saveProfessionalTeams,
     showToast
 });
-const { renderPlayerComparison } = createVsController({
+const {
+    renderPlayerComparison,
+    renderVsPage,
+    handleVsFormChange,
+    handleVsFormSubmit,
+    handleVsAction
+} = createVsController({
+    documentRef: document,
     players,
+    professionalTeams,
     getTeams: () => teams,
     getComparisonPlayerIds: () => comparisonPlayerIds,
     statGroups,
     calculateOverall,
-    escapeHtml
+    escapeHtml,
+    showToast
+});
+const {
+    renderNearbyRuns,
+    requestNearbyLocation,
+    captureRunLocation,
+    publishRun,
+    renderIncomingInvite,
+    submitInviteResponse,
+    receiveInviteResponse,
+    readInviteResponse,
+    readIncomingInvite,
+    handleAttendanceChange,
+    handleRunClick
+} = createRunsController({
+    documentRef: document,
+    windowRef: window,
+    players,
+    escapeHtml,
+    formatCurrency,
+    createId,
+    showToast
 });
 const {
     renderEvolution,
@@ -275,6 +328,8 @@ const {
 } = createProfileController({
     documentRef: document,
     players,
+    matches,
+    windowRef: window,
     getMatchMode: () => matchMode,
     allStatGroups,
     growthBranches,
@@ -478,6 +533,14 @@ function saveMatchResult() {
 function showAppView(viewName) {
     const view = document.querySelector(`#${viewName}-view`);
     if (!view) return;
+    const world = viewName === "professional" ? "clube" : "racha";
+    document.body.dataset.world = world;
+    document.querySelectorAll("[data-world-target]").forEach(button => {
+        button.setAttribute("aria-pressed", String(button.dataset.worldTarget === world));
+    });
+    document.querySelectorAll(".nav-item[data-app-world]").forEach(button => {
+        button.hidden = button.dataset.appWorld !== world;
+    });
     document.querySelectorAll(".app-view").forEach(section => section.classList.toggle("is-active", section === view));
     document.querySelectorAll(".nav-item").forEach(button => {
         if (button.dataset.viewTarget === viewName) button.setAttribute("aria-current", "page");
@@ -487,6 +550,10 @@ function showAppView(viewName) {
         matchMode = "professional";
         showProfessionalTab(activeProfessionalTab);
     }
+    else if (viewName === "vs") {
+        matchMode = "professional";
+        renderVsPage();
+    }
     else if (viewName === "match") {
         matchMode = "resenha";
         syncPlayerCreationControls();
@@ -494,14 +561,18 @@ function showAppView(viewName) {
         renderTeams();
     }
     if (viewName === "match" && !activeMatchSetup) activeMatchSetup = { ...gameSetup };
-    if (viewName === "home") renderHome();
+    if (viewName === "home") {
+        renderHome();
+        renderRunInvitePlayerOptions();
+    }
     if (viewName === "history") renderHistory();
     if (viewName === "payments") renderPayments();
+    if (viewName === "ranking") renderRankings();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function showProfessionalTab(tabName) {
-    const tab = ["teams", "evolution", "ranking"].includes(tabName) ? tabName : "teams";
+    const tab = ["teams", "evolution"].includes(tabName) ? tabName : "teams";
     activeProfessionalTab = tab;
     document.querySelectorAll(".professional-tabs [data-professional-tab-target]").forEach(button => {
         const selected = button.dataset.professionalTabTarget === tab;
@@ -514,24 +585,25 @@ function showProfessionalTab(tabName) {
     matchMode = "professional";
     if (tab === "teams") renderProfessionalTeams();
     if (tab === "evolution") renderEvolution();
-    if (tab === "ranking") renderRankings();
 }
 
 function readGameSetup() {
     gameSetup = {
         date: document.querySelector("#game-date").value,
         time: document.querySelector("#game-time").value,
-        venue: document.querySelector("#game-venue").value.trim(),
+        venue: document.querySelector("#game-venue").value.trim().slice(0, 200),
         fee: Math.max(0, Number(document.querySelector("#game-fee").value) || 0),
         mode: "resenha"
     };
     saveGameSetup();
+    document.querySelector("#game-location-preview").innerHTML = renderLocationPreview(gameSetup.venue, escapeHtml);
 }
 
 function renderMatchDetails() {
     const setup = activeMatchSetup || gameSetup;
     return `<section class="match-details" aria-label="Dados da partida">
         <div><span>DATA E HORÁRIO</span><strong>${formatMatchDate(setup.date)} · ${escapeHtml(setup.time || "Horário a definir")}</strong><small>${escapeHtml(setup.venue || "Local a definir")}</small></div>
+        ${renderLocationPreview(setup.venue, escapeHtml)}
     </section>`;
 }
 
@@ -558,6 +630,9 @@ function initializeDashboard() {
     document.querySelector("#game-time").value = gameSetup.time;
     document.querySelector("#game-venue").value = gameSetup.venue;
     document.querySelector("#game-fee").value = gameSetup.fee || "";
+    document.querySelector("#game-location-preview").innerHTML = renderLocationPreview(gameSetup.venue, escapeHtml);
+    document.querySelector("#vs-date").value = localDateKey();
+    renderVsPage();
     document.querySelectorAll(".match-mode-button").forEach(button => {
         button.setAttribute("aria-pressed", String(button.dataset.matchMode === "resenha"));
     });
@@ -575,6 +650,18 @@ function initializeDashboard() {
         nextTab.focus();
     });
     document.addEventListener("click", event => {
+        if (handleLocationMapClick(event)) return;
+        handleRunClick(event);
+        handleVsAction(event);
+        const worldButton = event.target.closest("[data-world-target]");
+        if (worldButton) {
+            if (worldButton.dataset.worldTarget === "clube") {
+                showAppView("professional");
+            } else {
+                showAppView("home");
+            }
+            return;
+        }
         const professionalTabButton = event.target.closest("[data-professional-tab-target]");
         if (professionalTabButton) {
             if (!document.querySelector("#professional-view").classList.contains("is-active")) showAppView("professional");
@@ -584,8 +671,35 @@ function initializeDashboard() {
         const viewButton = event.target.closest("[data-view-target]");
         if (viewButton) showAppView(viewButton.dataset.viewTarget);
     });
-    document.querySelector("#setup-form").addEventListener("input", readGameSetup);
-    document.querySelector("#setup-form").addEventListener("change", readGameSetup);
+    document.querySelector("#setup-form").addEventListener("input", event => {
+        readGameSetup();
+        if (event.target.id === "game-venue") resetRunLocationIfVenueChanged();
+    });
+    document.querySelector("#setup-form").addEventListener("change", event => {
+        readGameSetup();
+        if (event.target.id === "game-venue") resetRunLocationIfVenueChanged();
+    });
+    document.querySelector("#publish-open-run").addEventListener("click", () => {
+        if (!document.querySelector("#setup-form").reportValidity()) return;
+        readGameSetup();
+        publishRun(gameSetup);
+    });
+    document.querySelector("#run-capture-location").addEventListener("click", captureRunLocation);
+    document.querySelector("#nearby-location-button").addEventListener("click", requestNearbyLocation);
+    document.querySelector("#nearby-runs-list").addEventListener("change", handleAttendanceChange);
+    document.querySelector("#run-invitation-form").addEventListener("submit", submitInviteResponse);
+    document.querySelector("#vs-form").addEventListener("change", event => {
+        handleVsFormChange(event);
+        if (event.target.id === "vs-location") {
+            document.querySelector("#vs-location-preview").innerHTML = renderLocationPreview(event.target.value, escapeHtml);
+        }
+    });
+    document.querySelector("#vs-form").addEventListener("input", event => {
+        if (event.target.id === "vs-location") {
+            document.querySelector("#vs-location-preview").innerHTML = renderLocationPreview(event.target.value, escapeHtml);
+        }
+    });
+    document.querySelector("#vs-form").addEventListener("submit", handleVsFormSubmit);
     document.querySelector("#professional-team-form").addEventListener("submit", createProfessionalTeam);
     document.querySelector("#professional-team-list").addEventListener("click", handleProfessionalTeamAction);
     document.querySelector("#professional-team-list").addEventListener("change", handleProfessionalTeamChange);
@@ -612,6 +726,7 @@ function initializeDashboard() {
         renderRoster();
         renderTeams();
         renderHome();
+        renderRunInvitePlayerOptions();
         renderProfessionalTeams();
         showToast("Jogadores removidos. O histórico foi mantido.");
     });
@@ -1069,9 +1184,31 @@ teamsArea.addEventListener("keydown", event => {
 
 initializeSettings();
 initializeDashboard();
+document.querySelectorAll(".nav-item[data-app-world]").forEach(button => {
+    button.hidden = button.dataset.appWorld !== document.body.dataset.world;
+});
 renderRoster();
 renderTeams();
 renderHome();
 renderHistory();
 renderRankings();
 renderPayments();
+renderRunInvitePlayerOptions();
+renderNearbyRuns();
+const currentUrl = new URL(window.location.href);
+const incomingInvite = currentUrl.searchParams.get("convite");
+if (incomingInvite) {
+    const invite = readIncomingInvite(incomingInvite);
+    if (invite) renderIncomingInvite(invite);
+    else showToast("Este link de convite é inválido ou está incompleto.");
+}
+const incomingResponse = currentUrl.searchParams.get("resposta");
+if (incomingResponse) {
+    const response = readInviteResponse(incomingResponse);
+    if (!response) {
+        showToast("Este link de resposta é inválido ou está incompleto.");
+    } else if (receiveInviteResponse(response)) {
+        currentUrl.searchParams.delete("resposta");
+        window.history.replaceState({}, "", `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+    }
+}

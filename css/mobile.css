@@ -122,6 +122,7 @@
 }
 
 @media (max-width: 850px) {
+    .nearby-runs-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .teams { grid-template-columns: minmax(0, 1fr); }
     .teams::before { inset: 50% 0 auto; border-top: 1px solid rgba(231, 247, 234, .52); border-left: 0; }
     .teams::after { top: 50%; }
@@ -149,12 +150,25 @@
 @media (max-width: 620px) {
     body { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
     .topbar { justify-content: space-between; }
-    .main-nav { position: fixed; z-index: 7; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 6px 5px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid #34453a; background: rgba(11, 19, 13, .97); box-shadow: 0 -8px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
+    .main-nav { position: fixed; z-index: 7; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; padding: 6px 5px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid #34453a; background: rgba(11, 19, 13, .97); box-shadow: 0 -8px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
+    body[data-world="clube"] .main-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .nav-item { display: grid; min-width: 0; min-height: 46px; justify-items: center; align-content: center; gap: 2px; padding: 3px 1px; border-radius: 4px; font-size: 8px; }
     .nav-item > span { font-size: 16px; line-height: 1; }
     #evolution-roster .player-card > .player-skills-disclosure .disclosed-groups { grid-template-columns: 1fr; }
     :root[data-mode="light"] .main-nav { border-top-color: #c4d1c6; background: rgba(225, 234, 226, .98); box-shadow: 0 -8px 28px rgba(25, 47, 31, .12); }
+    .world-switch button { min-height: 38px; padding-inline: 9px; font-size: 9px; }
     .dashboard-head, .data-view-head { align-items: start; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+    .home-welcome { margin: 16px auto 22px; }
+    .home-welcome h1 { font-size: 34px; }
+    .home-action-grid { grid-template-columns: 1fr; gap: 9px; }
+    .home-action-card { min-height: 91px; padding: 14px; }
+    .home-action-disabled { grid-column: auto; }
+    .home-action-copy strong { font-size: 19px; }
+    .home-dashboard-grid { gap: 11px; margin-top: 15px; }
+    .home-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .home-shortcuts button { min-height: 48px; justify-content: center; gap: 4px; padding: 5px 3px; font-size: 9px; }
+    .home-setup-details summary { font-size: 10px; line-height: 1.45; }
+    .panel-head .destructive-action { font-size: 9px; }
     .dashboard-head h1, .data-view-head h1 { font-size: 43px; }
     .home-start { width: 100%; justify-content: space-between; }
     .dashboard-metrics { gap: 7px; }
@@ -202,6 +216,9 @@
 }
 
 @media (max-width: 900px) {
+    .home-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .home-action-disabled { grid-column: 1 / -1; }
+    .home-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
     .workspace { grid-template-columns: minmax(250px, .82fr) minmax(0, 1.18fr); gap: 10px; }
     .teams-head { align-items: flex-start; flex-wrap: wrap; }
     .match-actions { margin-left: auto; }
@@ -261,17 +278,19 @@
     :root[data-mode="light"] .team { background: rgba(226, 236, 227, .3); }
 }
 
-@media (max-width: 900px) {
-    .topbar { flex-wrap: wrap; justify-content: space-between; padding-block: 6px 0; }
+@media (max-width: 1100px) {
+    .topbar { flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding-block: 6px 0; }
+    .world-switch { margin-left: auto; }
     .main-nav { order: 2; flex: 1 0 100%; justify-content: space-between; overflow-x: auto; }
-    .nav-item { min-height: 46px; }
+    .nav-item { min-height: 46px; flex: 1 1 0; justify-content: center; gap: 4px; padding-inline: 5px; font-size: 10px; }
 }
 
 @media (max-width: 620px) {
-    .main-nav { width: 100%; grid-template-columns: repeat(5, minmax(0, 1fr)); justify-content: stretch; gap: 0; overflow: visible; }
+    .main-nav { width: 100%; grid-template-columns: repeat(6, minmax(0, 1fr)); justify-content: stretch; gap: 0; overflow: visible; }
     .nav-item { min-height: 48px; padding-inline: 0; font-size: 8px; line-height: 1.1; }
     .nav-item > span { font-size: 16px; }
     .professional-team-form { grid-template-columns: 1fr; }
+    .professional-team-form .club-field-name { grid-column: auto; }
     .professional-team-form .primary { width: 100%; }
     .professional-setup { padding: 14px; }
     .professional-team { padding: 13px; }
@@ -287,8 +306,36 @@
 }
 
 @media (max-width: 620px) {
+    .ranking-list { padding: 9px; }
+    .ranking-highlights { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .ranking-highlight { padding: 8px; }
+    .ranking-highlight li { grid-template-columns: 16px minmax(0, 1fr); gap: 4px; }
+    .ranking-highlight li small { grid-column: 2; text-align: left; }
+    .club-record dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 5px; }
     .professional-tabs { width: 100%; gap: 0; margin-bottom: 15px; overflow-x: auto; }
     .professional-tabs button { min-width: 0; min-height: 46px; flex: 1 0 auto; padding-inline: 13px; font-size: 11px; }
+    .vs-setup-card, .vs-upcoming-card { padding: 13px; }
+    .nearby-runs-list { grid-template-columns: minmax(0, 1fr); }
+    .nearby-runs-section .home-panel-head { flex-direction: column; }
+    .nearby-runs-section .home-panel-head .secondary-action { width: 100%; }
+    .run-invitation-form > .primary, .run-response-actions > :is(.primary, .secondary-action) { width: 100%; justify-content: center; }
+    .run-attendance-row select { max-width: 156px; }
+    .vs-setup-card form { gap: 14px; }
+    .vs-club-selectors { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+    .vs-divider { padding: 0; text-align: center; font-size: 16px; }
+    .vs-roster-grid, .vs-upcoming-list { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+    .vs-roster-grid fieldset { padding: 10px; }
+    .vs-player-choice { min-height: 44px; }
+    .vs-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .vs-location-field { grid-column: 1 / -1; }
+    .vs-confirm-button { width: 100%; }
+    .vs-confirmed-rosters { gap: 7px; }
+    .vs-confirmed-rosters > div { padding: 7px; }
+    .location-preview { padding: 8px; }
+    .location-map-placeholder { min-height: 120px; }
+    .location-preview-details { align-items: start; flex-direction: column; }
+    .location-actions { justify-content: start; }
+    .location-actions a { font-size: 10px; }
 }
 
 @media (max-width: 360px) {
@@ -311,6 +358,9 @@
 }
 
 @media (max-width: 620px) {
+    .home-action-grid { grid-template-columns: 1fr; }
+    .home-action-disabled { grid-column: auto; }
+    .home-dashboard-grid { grid-template-columns: minmax(0, 1fr); }
     .team-meta { min-width: 132px; }
     .team-captain-control { grid-template-columns: 1fr; gap: 3px; }
     .team-captain-control select { max-width: none; height: 38px; }

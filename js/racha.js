@@ -37,7 +37,7 @@ export function normalizeGameSetup(saved, today) {
     return {
         date: /^\d{4}-\d{2}-\d{2}$/.test(saved.date || "") ? saved.date : defaults.date,
         time: /^\d{2}:\d{2}$/.test(saved.time || "") ? saved.time : defaults.time,
-        venue: typeof saved.venue === "string" ? saved.venue.slice(0, 60) : defaults.venue,
+        venue: typeof saved.venue === "string" ? saved.venue.slice(0, 200) : defaults.venue,
         fee: Number.isFinite(Number(saved.fee)) ? Math.max(0, Number(saved.fee)) : defaults.fee,
         mode: defaults.mode
     };
